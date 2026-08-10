@@ -1,49 +1,59 @@
-# customer-360-analytics
-Customer 360 Analytics Platform — End-to-end e-commerce analytics using Python, SQL, PostgreSQL, Streamlit &amp; Plotly. Includes ETL, RFM segmentation, KPIs, sales, product, payment, delivery, Customer 360, Order 360 and Seller 360 analytics.
 Customer 360 Analytics Platform
 
-An end-to-end e-commerce analytics platform built with Python, PostgreSQL, SQL, Streamlit, Pandas, and Plotly. The project transforms raw Olist e-commerce data into actionable customer, product, seller, sales, payment, and delivery insights.
+An end-to-end e-commerce analytics platform built with Python, SQL, PostgreSQL, Pandas, Streamlit, and Plotly. The project transforms raw Olist e-commerce data into actionable customer, sales, product, payment, delivery, and seller insights.
 
 🚀 Features
+
 ETL Pipeline — Data loading, validation, cleaning, and PostgreSQL ingestion
+
 Executive KPIs — Revenue, orders, customers, average order value, and ratings
+
 RFM Analysis — Recency, Frequency, and Monetary scoring
+
 Customer Segmentation — Champions, Loyal Customers, Potential Loyalists, At Risk, Hibernating, and Needs Attention
+
 Sales Analytics — Revenue trends and state-level performance
+
 Product Analytics — Category revenue, items sold, and category performance
+
 Payment Analytics — Payment methods, transaction values, and installments
+
 Delivery Analytics — Delivery time, late-delivery rate, and state-level performance
-Customer 360 — Customer-level profile and purchase history
+
+Customer 360 — Customer profile, RFM metrics, and purchase history
+
 Order 360 — Order, product, seller, payment, review, and delivery details
-Seller 360 — Seller profile, orders, products, customers, and seller performance
+
+Seller 360 — Seller profile and related orders, products, and customers
+
 Universal Search — Search using Customer ID, Order ID, Product ID, or Seller ID
-Interactive Dashboard — Date, state, segment, and payment filters
+
+Interactive Dashboard — Date, state, customer segment, and payment filters
+
 🛠️ Tech Stack
-Category	Technologies
-Programming	Python
-Database	PostgreSQL
-Data Processing	Pandas
-Analytics	SQL, RFM Analysis, KPI Analysis
-Visualization	Plotly
-Dashboard	Streamlit
-Version Control	Git, GitLab
+
+Python | SQL | PostgreSQL | Pandas | Streamlit | Plotly | SQLAlchemy | Git | GitHub
+
 🏗️ Project Architecture
-Raw Olist CSV Data
-        ↓
+
+Olist CSV Data
+      ↓
 Data Loader
-        ↓
+      ↓
 Data Validation
-        ↓
+      ↓
 Data Cleaning
-        ↓
+      ↓
 PostgreSQL
-        ↓
+      ↓
 SQL Views & RFM Analysis
-        ↓
+      ↓
 Streamlit Dashboard
-        ↓
+      ↓
 Business Insights
-📊 Customer 360 Relationships
+
+🔗 Entity Relationships
+
 Customer
    │
    └── Order
@@ -52,9 +62,34 @@ Customer
         ├── Payment
         └── Review
 
-The dashboard allows users to drill down from a customer or directly search for an order, product, or seller and explore its connected entities.
+The platform connects these entities to provide detailed customer, order, product, and seller analysis.
+
+📊 RFM Analysis
+
+RFM analysis evaluates customer behavior using:
+
+Recency — How recently a customer purchased
+
+Frequency — How frequently a customer purchased
+
+Monetary — How much a customer spent
+
+Customers are scored and grouped into:
+
+Champions
+
+Loyal Customers
+
+Potential Loyalists
+
+At Risk
+
+Hibernating
+
+Needs Attention
 
 📁 Project Structure
+
 customer-360-analytics/
 │
 ├── dashboard/
@@ -78,50 +113,94 @@ customer-360-analytics/
 ├── requirements.txt
 ├── README.md
 └── .gitignore
-⚙️ Setup
+
+⚙️ Local Setup
+
 1. Clone the repository
-git clone <your-gitlab-repository-url>
+
+git clone <YOUR_GITHUB_REPOSITORY_URL>
 cd customer-360-analytics
+
 2. Install dependencies
+
 pip install -r requirements.txt
+
 3. Configure PostgreSQL
 
 Create a PostgreSQL database and configure the required database credentials using environment variables or Streamlit Secrets.
 
-Never commit passwords, API keys, .env, or secrets.toml to GitLab.
+Do not commit passwords, API keys, .env, or secrets.toml to GitHub.
 
 4. Run the ETL pipeline
+
 python main.py
-5. Launch the dashboard
+
+5. Launch the Streamlit dashboard
+
 streamlit run dashboard/app.py
-📈 Key Analytical Areas
-RFM Segmentation
 
-Customers are scored using:
+💡 Business Questions Answered
 
-Recency — How recently the customer purchased
-Frequency — How frequently the customer purchased
-Monetary — How much the customer spent
-
-These scores are combined to classify customers into actionable segments.
-
-Business Questions Answered
 Which customer segments generate the most revenue?
-Which products and categories perform best?
-Which payment methods are most commonly used?
-Which states have higher delivery times?
+
 Which customers are at risk?
+
+Which product categories perform best?
+
+Which payment methods are most commonly used?
+
+Which states generate the most revenue?
+
+Which states have higher delivery times?
+
 What orders belong to a particular customer?
+
 Which products and sellers are associated with an order?
+
 What customers and orders are connected to a seller?
+
+What is the purchasing behavior of a specific customer?
+
+🔍 Customer 360 Search
+
+The Customer Detail page supports entity-based exploration:
+
+Customer ID
+     ↓
+Customer 360
+     ↓
+Orders → Products → Sellers → Payments → Reviews
+
+Order ID
+     ↓
+Order 360
+     ↓
+Customer + Products + Seller + Payment + Review
+
+Product ID
+     ↓
+Related Orders
+     ↓
+Customer + Seller + Payment + Review
+
+Seller ID
+     ↓
+Seller 360
+     ↓
+Orders + Products + Customers
+
 🔐 Data & Security
 
 This project uses the public Olist Brazilian E-Commerce dataset for analytics and demonstration purposes.
 
-Sensitive credentials should be stored outside the repository using environment variables or deployment secrets.
+Database credentials should be stored securely using environment variables during local development and deployment secrets when deployed.
+
+🚀 Deployment
+
+The dashboard is structured for deployment using Streamlit Community Cloud with a remotely accessible PostgreSQL database.
 
 👨‍💻 Author
 
 Upendar
 
-Built as an end-to-end data analytics and business intelligence portfolio project.
+Built as an end-to-end Data Analytics and Business Intelligence portfolio project.
