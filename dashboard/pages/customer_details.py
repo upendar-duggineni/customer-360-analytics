@@ -1082,8 +1082,4 @@ st.divider()
 st.caption(
     "Customer 360 Analytics Platform • "
     "Customer → Order → Product → Seller → Payment → Review"
-<<<<<<< HEAD
 )
-=======
-)
->>>>>>> a1b000e1a76cdab1a47d88eb0bc38d3e8778a88f
