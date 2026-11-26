@@ -407,3 +407,46 @@ The repository includes a `render.yaml` blueprint for the Streamlit platform ent
 Create a managed PostgreSQL database and configure the service's `DATABASE_URL` environment variable. The database connection accepts either `DATABASE_URL` or the local `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` variables. For hosted PostgreSQL, `DB_SSLMODE=require` is configured by the blueprint.
 
 Never commit database credentials, `.env`, or deployment secrets. Configure them in the hosting provider's environment settings. The platform requires a reachable PostgreSQL database; the demo and business workspace are not stateless in-memory services.
+
+
+## AI Business Analyst (Milestone 7)
+
+The business dashboard includes an optional OpenAI-powered chat assistant. It uses the OpenAI Responses API with a fixed set of read-only analytics functions. The model interprets questions and selects a tool; Python/Pandas and the existing analytics engine calculate the figures. The model does not receive database credentials and cannot execute arbitrary SQL.
+
+### Supported questions
+
+- Workspace overview, dataset coverage, core KPIs and metric limitations.
+- Top customers by historical observed revenue.
+- Exact customer-ID lookup with related order, item, payment and review counts.
+- Monthly order, customer and observed-revenue trends.
+- Product-category performance using order-line counts and recorded item value.
+- Payment totals and mapped payment-method comparisons.
+
+The assistant is workspace-scoped because it receives only the already-loaded dataset dictionary for the active workspace. Conversation history is kept in Streamlit session state and separated by workspace ID. Customer lookup deliberately excludes email and phone fields from the model context. Tool outputs are bounded and the assistant is instructed to disclose missing datasets and metric limitations.
+
+### Configure OpenAI
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Set the key locally in `.env` (never commit this file):
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5.5
+```
+
+For hosting, add `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in the provider's environment/secrets settings. The app does not ask users to paste keys into chat. API usage is billed separately by the OpenAI account.
+
+### AI limitations and privacy
+
+- The assistant is unavailable until an OpenAI API key is configured.
+- Only the minimized output of explicitly defined analytics tools is sent to OpenAI, not full uploaded datasets or raw SQL access.
+- Workspace data is still processed in the app's active session. This MVP workspace uses a bearer access key and is not full user authentication or role-based access control.
+- Tool results are deterministic but are limited to mapped fields and uploaded data coverage.
+- Revenue is historical observed revenue; currency is not inferred. Inactivity is a rule, not predictive churn. Product order lines are not unit counts.
+- Conversation history is session-scoped and is not persisted as a permanent chat record.
+- Review and validate answers before using them for business-critical decisions.

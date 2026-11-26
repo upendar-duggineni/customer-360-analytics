@@ -8,6 +8,7 @@ from src.business_storage import initialize_storage, load_workspace_datasets
 from src.business_analytics import build_customer_360
 from src.customer_360_detail import build_customer_360_detail
 from src.relationship_integrity import audit_relationships
+from platform_pages.ai_assistant import render_ai_assistant
 
 st.title("📈 My Business Analytics Dashboard")
 workspace = st.session_state.get("active_business_workspace")
@@ -136,6 +137,8 @@ if summary.get("customer_only"):
             st.dataframe(frame.head(100), use_container_width=True, hide_index=True)
             st.download_button(f"Download {name} CSV", frame.to_csv(index=False).encode("utf-8"), f"{name.lower().replace(' ', '_')}.csv", "text/csv", key=f"customer_only_download_{name}")
     st.page_link("platform_pages/business_workspace.py", label="Manage workspace and upload more datasets", icon=":material/settings:")
+    st.subheader("AI Business Analyst")
+    render_ai_assistant(tables, workspace["workspace_id"])
     st.caption("Purchase frequency, repeat rate, RFM, cohorts, inactivity and revenue appear after compatible Orders and transaction datasets are uploaded.")
     st.stop()
 
@@ -162,7 +165,7 @@ if analytics["limitations"]:
             st.info(limitation)
 
 # Build only tabs supported by the uploaded canonical datasets and data volume.
-tab_names = ["Executive insights"]
+tab_names = ["Executive insights", "AI Assistant"]
 if "segment" in analytics["rfm"].columns:
     tab_names.append("RFM segmentation")
 if not analytics["cohort"].empty:
@@ -238,6 +241,10 @@ if "Customer explorer" in tab_by_name:
         st.dataframe(view, use_container_width=True, hide_index=True)
         st.download_button("Download Customer 360 results CSV", customer_frame.to_csv(index=False).encode("utf-8"), "customer_360_results.csv", "text/csv")
 
+
+if "AI Assistant" in tab_by_name:
+    with tab_by_name["AI Assistant"]:
+        render_ai_assistant(tables, workspace["workspace_id"])
 
 if "Customer 360" in tab_by_name:
     with tab_by_name["Customer 360"]:
