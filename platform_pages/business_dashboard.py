@@ -1,14 +1,27 @@
-"""Dashboard for business datasets saved in the active Streamlit session."""
+"""Persistent analytics dashboard for the active business workspace."""
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.business_storage import initialize_storage, load_workspace_datasets
+
 st.title("📈 My Business Analytics Dashboard")
-st.caption("Company-uploaded data only · Separate from the Olist demo")
-tables = st.session_state.get("business_tables", {})
-meta = st.session_state.get("business_meta", {})
+workspace = st.session_state.get("active_business_workspace")
+if not workspace:
+    st.info("Open your business workspace first to view its saved analytics.")
+    st.page_link("platform_pages/business_workspace.py", label="Open Business Workspace", icon=":material/business:")
+    st.stop()
+
+try:
+    initialize_storage()
+    tables, metadata = load_workspace_datasets(workspace["workspace_id"])
+except Exception as exc:
+    st.error(f"Could not load saved business data: {exc}")
+    st.stop()
+
+st.caption(f"{workspace['workspace_name']} · {workspace['workspace_type']} · Persistent PostgreSQL data")
 if not tables:
-    st.info("No datasets have been saved in this session yet.")
+    st.info("No saved datasets yet. Upload Customers and Orders to get started.")
     st.page_link("platform_pages/business_workspace.py", label="Go to Upload Centre", icon=":material/upload_file:")
     st.stop()
 
@@ -42,11 +55,12 @@ if "product_category_name" in products:
     category = products["product_category_name"].fillna("Unknown").value_counts().head(15).rename_axis("category").reset_index(name="products")
     st.plotly_chart(px.bar(category, x="category", y="products", title="Product categories"), use_container_width=True)
 
-st.subheader("Saved datasets and results")
+st.subheader("Saved datasets and exports")
 for name, frame in tables.items():
     with st.expander(f"{name} · {len(frame):,} rows"):
-        st.caption("Source file: " + meta.get(name, {}).get("filename", "Unknown"))
+        st.caption(f"Source: {metadata[name]['filename']} · Last saved: {metadata[name]['updated_at']}")
         st.dataframe(frame.head(100), use_container_width=True, hide_index=True)
-        st.download_button(f"Download {name} results as CSV", frame.to_csv(index=False).encode("utf-8"),
-                           file_name=f"{name.lower().replace(' ', '_')}_normalized.csv", mime="text/csv", key=f"dl_{name}")
-st.warning("Saved results are session-only in this prototype. They disappear when the session expires or the server restarts. Permanent encrypted storage, authentication and tenant isolation are required before real company data is used.")
+        st.download_button(f"Download {name} as CSV", frame.to_csv(index=False).encode("utf-8"),
+                           file_name=f"{name.lower().replace(' ', '_')}_normalized.csv", mime="text/csv", key=f"download_{name}")
+st.page_link("platform_pages/business_workspace.py", label="Manage workspace and datasets", icon=":material/settings:")
+st.warning("Workspace access currently uses a shared secret key. Individual user accounts, role-based permissions, invitations, audit logs and production-grade tenant controls are not yet implemented.")

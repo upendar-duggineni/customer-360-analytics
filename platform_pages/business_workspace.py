@@ -1,9 +1,14 @@
-"""Business upload, preview, validation and session save workflow."""
+"""Persistent business workspace, upload, validation and dataset management."""
 from io import BytesIO
 from pathlib import Path
 import re
 import pandas as pd
 import streamlit as st
+
+from src.business_storage import (
+    create_workspace, initialize_storage, open_workspace, save_dataset,
+    load_workspace_datasets,
+)
 
 TABLES = {
     "Customers": {"required": ["customer_id"], "optional": ["customer_unique_id", "customer_city", "customer_state"]},
@@ -17,7 +22,6 @@ ALIASES = {
     "customer_unique_id": ["customer unique id", "customer_unique_id"],
     "customer_city": ["city", "customer city"], "customer_state": ["state", "province", "region"],
     "order_id": ["order id", "orderid", "order_no", "order number", "transaction id", "transaction_id"],
-    "customer_id": ["customer id", "customerid", "cust id", "cust_id", "client id", "client_number"],
     "order_purchase_timestamp": ["purchase date", "purchase_date", "order date", "order_date", "created_at", "created date"],
     "order_status": ["status", "order status"], "product_id": ["product id", "productid", "sku", "item id", "item_id"],
     "price": ["item price", "unit price", "sale price"], "freight_value": ["shipping", "shipping cost", "delivery charge"],
@@ -49,12 +53,11 @@ def suggest(columns, field):
             return lookup[norm(candidate)]
     return None
 
-def prepare(raw, mapping, table):
+def prepare(raw, mapping):
     selected = {source: target for target, source in mapping.items() if source}
     frame = raw[list(selected)].rename(columns=selected).copy()
-    for field in ["order_purchase_timestamp"]:
-        if field in frame:
-            frame[field] = pd.to_datetime(frame[field], errors="coerce")
+    if "order_purchase_timestamp" in frame:
+        frame["order_purchase_timestamp"] = pd.to_datetime(frame["order_purchase_timestamp"], errors="coerce")
     for field in ["price", "freight_value", "payment_value"]:
         if field in frame:
             frame[field] = pd.to_numeric(frame[field], errors="coerce")
@@ -64,25 +67,87 @@ def prepare(raw, mapping, table):
     return frame
 
 st.title("🏢 Business Data Upload Centre")
-st.caption("Import company data, map columns, preview quality checks and save approved results to your business dashboard.")
-st.warning("Prototype storage: uploads are processed in memory and saved only in this active Streamlit session. Do not upload confidential or production personal data yet. Permanent secure storage and company/team access controls are not implemented.")
+st.caption("Your persistent business workspace. Uploaded datasets are stored separately from the Olist demo.")
+try:
+    initialize_storage()
+except Exception as exc:
+    st.error("Business storage could not connect to PostgreSQL. Check DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD in your local environment or deployment secrets.")
+    st.exception(exc)
+    st.stop()
 
-if "business_tables" not in st.session_state:
-    st.session_state.business_tables = {}
-if "business_meta" not in st.session_state:
-    st.session_state.business_meta = {}
+if "active_business_workspace" not in st.session_state:
+    st.session_state.active_business_workspace = None
 
-st.subheader("1 · Upload datasets")
-st.write("Customers and Orders are the recommended starting point. Other files add richer analysis.")
+if st.session_state.active_business_workspace is None:
+    st.subheader("Create a workspace")
+    with st.form("create_business_workspace"):
+        name = st.text_input("Workspace name", placeholder="e.g. Acme Retail")
+        kind = st.selectbox("Workspace type", ["Individual", "Company"])
+        create = st.form_submit_button("Create workspace", type="primary")
+    if create:
+        try:
+            workspace = create_workspace(name, kind)
+            st.session_state.active_business_workspace = {
+                "workspace_id": workspace["workspace_id"],
+                "workspace_name": workspace["workspace_name"],
+                "workspace_type": workspace["workspace_type"],
+                "access_key": workspace["access_key"],
+            }
+            st.session_state["new_workspace_access_key"] = workspace["access_key"]
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Could not create workspace: {exc}")
+
+    st.divider()
+    st.subheader("Open an existing workspace")
+    with st.form("open_business_workspace"):
+        access_key = st.text_input("Workspace access key", type="password")
+        open_clicked = st.form_submit_button("Open workspace")
+    if open_clicked:
+        try:
+            workspace = open_workspace(access_key)
+            if workspace:
+                st.session_state.active_business_workspace = {
+                    **workspace, "access_key": access_key.strip()
+                }
+                st.rerun()
+            else:
+                st.error("That workspace key was not recognized.")
+        except Exception as exc:
+            st.error(f"Could not open workspace: {exc}")
+    st.info("The workspace access key is a bearer credential. Anyone who has it can access that workspace. Share it only with trusted team members; role-based accounts and invitations are a later milestone.")
+    st.stop()
+
+workspace = st.session_state.active_business_workspace
+st.success(f"Workspace: {workspace['workspace_name']} · {workspace['workspace_type']}")
+if st.session_state.get("new_workspace_access_key"):
+    st.warning("Copy and save this workspace key now. It is shown only once and cannot currently be recovered.")
+    st.code(st.session_state["new_workspace_access_key"])
+    st.session_state["new_workspace_access_key"] = None
+with st.expander("Workspace access"):
+    st.caption("Share this access key only with trusted members. The current MVP uses one shared key, not individual user accounts or roles.")
+    st.code(workspace["access_key"])
+if st.button("Switch workspace / sign out"):
+    st.session_state.active_business_workspace = None
+    st.rerun()
+
+try:
+    saved, metadata = load_workspace_datasets(workspace["workspace_id"])
+except Exception as exc:
+    st.error(f"Could not load saved workspace datasets: {exc}")
+    st.stop()
+
+st.subheader("Upload your business data")
+st.write("Upload one file per dataset. Start with Customers and Orders. Products, Order items and Payments are optional.")
 tabs = st.tabs(list(TABLES))
 for table, tab in zip(TABLES, tabs):
     with tab:
         spec = TABLES[table]
         st.caption("Required: " + ", ".join(spec["required"]) + (" · Optional: " + ", ".join(spec["optional"]) if spec["optional"] else ""))
         upload = st.file_uploader(f"Choose {table} file", type=["csv", "xlsx", "xlsm"], key=f"file_{table}")
+        if table in saved:
+            st.success(f"Persistent dataset available: {len(saved[table]):,} rows. Uploading and saving a new file replaces this dataset.")
         if upload is None:
-            if table in st.session_state.business_tables:
-                st.success("A dataset is already saved for this table in this session. Upload a new file to replace it.")
             continue
         try:
             raw = read_file(upload)
@@ -113,30 +178,25 @@ for table, tab in zip(TABLES, tabs):
             elif len(used) != len(set(used)):
                 st.error("Each source column can only be mapped once.")
             else:
-                frame = prepare(raw, mapping, table)
-                issues = []
-                warnings = []
+                frame = prepare(raw, mapping)
+                issues, warnings = [], []
                 for field in spec["required"]:
                     bad = int(frame[field].isna().sum())
                     if bad:
                         issues.append(f"{field}: {bad:,} missing or invalid values")
-                key = {"Customers": ["customer_id"], "Orders": ["order_id"], "Products": ["product_id"]}.get(table, [])
-                for field in key:
+                key_fields = {"Customers": ["customer_id"], "Orders": ["order_id"], "Products": ["product_id"]}.get(table, [])
+                for field in key_fields:
                     dup = int(frame[field].duplicated(keep=False).sum())
                     if dup:
                         warnings.append(f"{field}: {dup:,} rows participate in duplicate keys")
-                exact_dups = int(frame.duplicated().sum())
-                if exact_dups:
-                    warnings.append(f"{exact_dups:,} completely duplicated rows")
-                if frame.empty:
-                    issues.append("No data rows found.")
-                st.session_state[f"pending_{table}"] = {
-                    "frame": frame, "issues": issues, "warnings": warnings, "filename": upload.name
-                }
+                exact = int(frame.duplicated().sum())
+                if exact:
+                    warnings.append(f"{exact:,} completely duplicated rows")
+                st.session_state[f"pending_{table}"] = {"frame": frame, "issues": issues, "warnings": warnings, "filename": upload.name}
         pending = st.session_state.get(f"pending_{table}")
         if pending is not None:
             frame = pending["frame"]
-            st.markdown("**2 · Normalized preview**")
+            st.markdown("**Normalized preview**")
             st.dataframe(frame.head(100), use_container_width=True, hide_index=True)
             a, b, c = st.columns(3)
             a.metric("Rows", f"{len(frame):,}")
@@ -147,37 +207,19 @@ for table, tab in zip(TABLES, tabs):
             for warning in pending["warnings"]:
                 st.warning(warning)
             if not pending["issues"]:
-                if st.button(f"Save {table} to Business Dashboard", type="primary", key=f"save_{table}", use_container_width=True):
-                    st.session_state.business_tables[table] = frame.copy()
-                    st.session_state.business_meta[table] = {"filename": pending["filename"]}
-                    st.success(f"{table} saved for this session.")
-                    st.rerun()
+                if st.button(f"Save {table} permanently to this workspace", type="primary", key=f"save_{table}", use_container_width=True):
+                    try:
+                        save_dataset(workspace["workspace_id"], table, pending["filename"], frame)
+                        st.success(f"{table} saved to PostgreSQL.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not save dataset: {exc}")
             else:
                 st.info("Correct required-field issues in the source file before saving.")
 
 st.divider()
-st.subheader("3 · Cross-dataset relationship checks")
-saved = st.session_state.business_tables
-relations = []
-if "Orders" in saved and "Customers" in saved:
-    known = set(saved["Customers"]["customer_id"].dropna().astype(str))
-    orphan = int((~saved["Orders"]["customer_id"].astype(str).isin(known)).sum())
-    relations.append(("Orders → Customers", orphan))
-if "Order items" in saved and "Orders" in saved:
-    known = set(saved["Orders"]["order_id"].dropna().astype(str))
-    orphan = int((~saved["Order items"]["order_id"].astype(str).isin(known)).sum())
-    relations.append(("Order items → Orders", orphan))
-if "Payments" in saved and "Orders" in saved:
-    known = set(saved["Orders"]["order_id"].dropna().astype(str))
-    orphan = int((~saved["Payments"]["order_id"].astype(str).isin(known)).sum())
-    relations.append(("Payments → Orders", orphan))
-for label, count in relations:
-    (st.success if count == 0 else st.warning)(f"{label}: {count:,} orphan references.")
-if not relations:
-    st.caption("Save related datasets to enable relationship checks.")
-
-st.divider()
-st.metric("Datasets saved in this session", len(saved))
-st.metric("Total saved rows", f"{sum(len(df) for df in saved.values()):,}")
+st.subheader("Saved datasets")
+for name, frame in saved.items():
+    st.write(f"**{name}** · {len(frame):,} rows · {metadata[name]['filename']}")
 if saved:
     st.page_link("platform_pages/business_dashboard.py", label="Open My Business Dashboard", icon=":material/analytics:", width="stretch")
