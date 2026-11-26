@@ -53,6 +53,16 @@ def initialize_storage():
         )
         """,
         f"CREATE INDEX IF NOT EXISTS idx_business_datasets_workspace ON {SCHEMA}.datasets(workspace_id)",
+        f"""
+        CREATE TABLE IF NOT EXISTS {SCHEMA}.mapping_profiles (
+            workspace_id UUID NOT NULL REFERENCES {SCHEMA}.workspaces(workspace_id) ON DELETE CASCADE,
+            source_fingerprint CHAR(64) NOT NULL,
+            dataset_name TEXT NOT NULL,
+            mapping_json JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY(workspace_id, source_fingerprint)
+        )
+        """,
     ]
     with engine.begin() as conn:
         for statement in statements:
@@ -201,3 +211,38 @@ def load_workspace_datasets(workspace_id: str):
                 "updated_at": dataset["updated_at"].isoformat() if dataset["updated_at"] else None,
             }
     return result, metadata
+
+
+def save_mapping_profile(workspace_id: str, fingerprint: str, dataset_name: str, mapping: dict):
+    """Persist a user-confirmed source-to-canonical mapping for this workspace."""
+    payload = json.dumps(mapping, ensure_ascii=False)
+    with engine.begin() as conn:
+        conn.execute(
+            text(f"""
+                INSERT INTO {SCHEMA}.mapping_profiles
+                    (workspace_id, source_fingerprint, dataset_name, mapping_json, updated_at)
+                VALUES
+                    (:workspace_id, :fingerprint, :dataset_name, CAST(:mapping AS jsonb), NOW())
+                ON CONFLICT (workspace_id, source_fingerprint)
+                DO UPDATE SET dataset_name = EXCLUDED.dataset_name,
+                              mapping_json = EXCLUDED.mapping_json,
+                              updated_at = NOW()
+            """),
+            {"workspace_id": workspace_id, "fingerprint": fingerprint,
+             "dataset_name": dataset_name, "mapping": payload},
+        )
+
+
+def load_mapping_profile(workspace_id: str, fingerprint: str):
+    """Return a previously confirmed mapping for the matching source fingerprint."""
+    with engine.connect() as conn:
+        value = conn.execute(
+            text(f"""
+                SELECT mapping_json FROM {SCHEMA}.mapping_profiles
+                WHERE workspace_id = :workspace_id AND source_fingerprint = :fingerprint
+            """),
+            {"workspace_id": workspace_id, "fingerprint": fingerprint},
+        ).scalar_one_or_none()
+    if value is None:
+        return None
+    return value if isinstance(value, dict) else json.loads(value)
