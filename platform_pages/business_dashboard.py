@@ -10,7 +10,7 @@ from src.customer_360_detail import build_customer_360_detail
 from src.relationship_integrity import audit_relationships
 from platform_pages.ai_assistant import render_ai_assistant
 
-st.title("📈 My Business Analytics Dashboard")
+
 workspace = st.session_state.get("active_business_workspace")
 if not workspace:
     st.info("Open your business workspace first to view its saved analytics.")
@@ -24,8 +24,11 @@ except Exception as exc:
     st.error(f"Could not load saved business data: {exc}")
     st.stop()
 
+header_left, header_right = st.columns([8, 1.5], vertical_alignment="center")
+header_left.title("📈 My Business Analytics Dashboard")
+with header_right:
+    render_ai_assistant(tables, workspace["workspace_id"])
 st.caption(f"{workspace['workspace_name']} · {workspace['workspace_type']} · Persistent PostgreSQL data")
-render_ai_assistant(tables, workspace["workspace_id"])
 relationship_audit = audit_relationships(tables)
 with st.expander("Dataset relationship integrity", expanded=relationship_audit["summary"]["relationships_needing_review"] > 0):
     audit_summary = relationship_audit["summary"]

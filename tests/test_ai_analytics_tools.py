@@ -11,6 +11,9 @@ from src.ai_assistant.analytics_tools import (
 
 
 def tables():
+    order_ids = [f"o{i}" for i in range(30)]
+    customers = ["c1" if i % 2 == 0 else "c2" for i in range(30)]
+    dates = pd.date_range("2024-01-05", periods=30, freq="3D")
     return {
         "Customers": pd.DataFrame({
             "customer_id": ["c1", "c2"],
@@ -18,20 +21,20 @@ def tables():
             "customer_email": ["private@example.com", "other@example.com"],
         }),
         "Orders": pd.DataFrame({
-            "order_id": ["o1", "o2", "o3"],
-            "customer_id": ["c1", "c1", "c2"],
-            "order_purchase_timestamp": pd.to_datetime(["2024-01-05", "2024-02-05", "2024-02-10"]),
-            "order_status": ["completed", "completed", "cancelled"],
+            "order_id": order_ids,
+            "customer_id": customers,
+            "order_purchase_timestamp": dates,
+            "order_status": ["completed"] * 30,
         }),
         "Payments": pd.DataFrame({
-            "order_id": ["o1", "o2", "o3"],
-            "payment_amount": [100.0, 50.0, 25.0],
-            "payment_method": ["card", "upi", "card"],
+            "order_id": order_ids,
+            "payment_amount": [100.0 + i for i in range(30)],
+            "payment_method": ["card" if i % 2 == 0 else "upi" for i in range(30)],
         }),
         "Order items": pd.DataFrame({
-            "order_id": ["o1", "o2", "o3"],
-            "product_id": ["p1", "p2", "p1"],
-            "unit_price": [80.0, 40.0, 20.0],
+            "order_id": order_ids,
+            "product_id": ["p1" if i % 2 == 0 else "p2" for i in range(30)],
+            "unit_price": [80.0 + i for i in range(30)],
         }),
         "Products": pd.DataFrame({
             "product_id": ["p1", "p2"],
