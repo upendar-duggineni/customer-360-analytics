@@ -169,7 +169,11 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
 
     # RFM is calculated only if usable order dates and monetary data exist.
     rfm = customer_metrics[["customer_id", "recency_days", "frequency", "observed_revenue"]].copy()
-    if rfm["recency_days"].notna().any() and rfm["observed_revenue"].notna().any():
+    if total_orders_for_threshold := int(orders["order_id"].nunique()):
+        enough_rfm_volume = total_orders_for_threshold >= 30
+    else:
+        enough_rfm_volume = False
+    if enough_rfm_volume and rfm["recency_days"].notna().any() and rfm["observed_revenue"].notna().any():
         rfm["R_score"] = _score(rfm["recency_days"], ascending=False)
         rfm["F_score"] = _score(rfm["frequency"], ascending=True)
         rfm["M_score"] = _score(rfm["observed_revenue"], ascending=True)
@@ -191,13 +195,16 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
             validate="one_to_one",
         )
     else:
-        result["limitations"].append("RFM segmentation requires valid order dates and a supported revenue field.")
+        if int(orders["order_id"].nunique()) < 30:
+            result["limitations"].append("RFM is hidden because fewer than 30 orders are available. Upload more history for a more meaningful segmentation.")
+        else:
+            result["limitations"].append("RFM segmentation requires valid order dates and a supported revenue field.")
 
     # Cohorts use first observed order month and each subsequent order month.
     dated_orders = orders.dropna(subset=["order_purchase_timestamp"]).copy()
     cohort_table = _empty()
     monthly = _empty()
-    if not dated_orders.empty:
+    if len(orders) >= 30 and not dated_orders.empty:
         dated_orders["order_month"] = dated_orders["order_purchase_timestamp"].dt.to_period("M")
         first_month = dated_orders.groupby("customer_id")["order_month"].min().rename("cohort_month")
         dated_orders = dated_orders.join(first_month, on="customer_id")
@@ -222,6 +229,8 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
             revenue_monthly = rev_orders.groupby("order_month")["order_revenue"].sum(min_count=1)
             monthly["revenue"] = monthly["order_month"].map(revenue_monthly)
         monthly = monthly.drop(columns=["order_month"])
+    elif len(orders) < 30:
+        result["limitations"].append("Cohort analysis is hidden because fewer than 30 orders are available; more transaction history is recommended.")
 
     total_customers = int(customer_metrics["customer_id"].nunique())
     total_orders = int(orders["order_id"].nunique())

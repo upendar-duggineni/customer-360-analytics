@@ -1,4 +1,4 @@
-"""Customer 360 analytics dashboard for the active business workspace."""
+"""Adaptive Customer 360 analytics dashboard for the active business workspace."""
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -23,22 +23,22 @@ except Exception as exc:
 
 st.caption(f"{workspace['workspace_name']} · {workspace['workspace_type']} · Persistent PostgreSQL data")
 if not tables:
-    st.info("No saved datasets yet. Upload Customers and Orders to get started.")
-    st.page_link("platform_pages/business_workspace.py", label="Go to Upload Centre", icon=":material/upload_file:")
+    st.info("No saved datasets yet. Upload e-commerce data to get started.")
+    st.page_link("platform_pages/business_workspace.py", label="Go to Data Translation Centre", icon=":material/upload_file:")
     st.stop()
 
 with st.sidebar:
     st.subheader("Analytics settings")
     churn_days = st.number_input("Inactivity threshold (days)", min_value=30, max_value=365, value=90, step=15)
-    st.caption("Used for a transparent inactivity flag, not a predictive churn model.")
+    st.caption("This is an inactivity rule, not a predictive churn model.")
 
 analytics = build_customer_360(tables, churn_days=int(churn_days))
 summary = analytics["summary"]
 if not summary:
-    st.warning("Customer analytics could not be calculated from the saved datasets.")
+    st.warning("Customer-level analytics are not available from the translated data.")
     for note in analytics["limitations"]:
         st.write("• " + note)
-    st.page_link("platform_pages/business_workspace.py", label="Review uploaded datasets", icon=":material/upload_file:")
+    st.page_link("platform_pages/business_workspace.py", label="Review translated data", icon=":material/upload_file:")
     st.stop()
 
 st.subheader("Business overview")
@@ -48,22 +48,39 @@ b.metric("Orders", f"{summary['orders']:,}")
 c.metric("Repeat purchase rate", f"{summary['repeat_rate']:.1%}" if pd.notna(summary["repeat_rate"]) else "Not available")
 d.metric("Observed revenue", f"{summary['revenue']:,.2f}" if pd.notna(summary["revenue"]) else "Not available")
 if summary["revenue_source"]:
-    st.caption(f"Revenue source: {summary['revenue_source']} · Currency is not inferred.")
-st.caption(f"Data snapshot: {summary['snapshot_date'].date()} · Inactivity rule: more than {summary['churn_days']} days since last recorded order.")
+    st.caption(f"Revenue source: {summary['revenue_source']} · Currency is not inferred from the uploaded values.")
+st.caption(f"Data snapshot: {summary['snapshot_date'].date()} · Inactivity threshold: {summary['churn_days']} days.")
 
-for limitation in analytics["limitations"]:
-    st.info(limitation)
+if analytics["limitations"]:
+    with st.expander("Data coverage and analytics limitations", expanded=True):
+        for limitation in analytics["limitations"]:
+            st.info(limitation)
 
-tabs = st.tabs(["Executive insights", "RFM segmentation", "Retention & cohorts", "Customer explorer", "Saved datasets"])
+# Build only tabs supported by the uploaded canonical datasets and data volume.
+tab_names = ["Executive insights"]
+if "segment" in analytics["rfm"].columns:
+    tab_names.append("RFM segmentation")
+if not analytics["cohort"].empty:
+    tab_names.append("Retention & cohorts")
+if not analytics["customers"].empty:
+    tab_names.append("Customer explorer")
+if "Products" in tables or "Order items" in tables:
+    tab_names.append("Product analytics")
+if "Reviews" in tables:
+    tab_names.append("Customer satisfaction")
+if "Payments" in tables:
+    tab_names.append("Payment analytics")
+tab_names.append("Saved datasets")
+tabs = st.tabs(tab_names)
+tab_by_name = dict(zip(tab_names, tabs))
 
-with tabs[0]:
-    st.subheader("Business insights")
+with tab_by_name["Executive insights"]:
+    st.subheader("Evidence-based business insights")
     if analytics["insights"]:
         for insight in analytics["insights"]:
             st.markdown(f"- {insight}")
     else:
-        st.caption("More complete datasets will unlock additional insights.")
-
+        st.caption("More complete transaction data will unlock additional insights.")
     monthly = analytics["monthly"]
     if not monthly.empty:
         st.subheader("Monthly business activity")
@@ -72,17 +89,13 @@ with tabs[0]:
             metric_options.append("revenue")
         metric = st.selectbox("Trend metric", metric_options)
         st.plotly_chart(px.line(monthly, x="month", y=metric, markers=True, title=f"Monthly {metric.replace('_', ' ').title()}"), use_container_width=True)
-
     if "customer_state" in analytics["customers"]:
         geo = analytics["customers"].groupby("customer_state", dropna=False)["customer_id"].nunique().reset_index(name="customers")
         st.plotly_chart(px.bar(geo.sort_values("customers", ascending=False).head(15), x="customer_state", y="customers", title="Customers by state"), use_container_width=True)
 
-with tabs[1]:
-    st.subheader("RFM customer segmentation")
-    rfm = analytics["rfm"]
-    if "segment" not in rfm:
-        st.info("RFM requires valid order dates and a supported revenue field.")
-    else:
+if "RFM segmentation" in tab_by_name:
+    with tab_by_name["RFM segmentation"]:
+        rfm = analytics["rfm"]
         segment_counts = rfm["segment"].value_counts().rename_axis("segment").reset_index(name="customers")
         left, right = st.columns([1, 2])
         left.plotly_chart(px.pie(segment_counts, names="segment", values="customers", hole=0.55, title="Customer segments"), use_container_width=True)
@@ -90,51 +103,87 @@ with tabs[1]:
         st.dataframe(rfm.sort_values("RFM_score", ascending=False), use_container_width=True, hide_index=True)
         st.download_button("Download RFM segmentation CSV", rfm.to_csv(index=False).encode("utf-8"), "customer_rfm_segmentation.csv", "text/csv")
 
-with tabs[2]:
-    st.subheader("Repeat purchase and retention")
-    repeat = summary["repeat_rate"]
-    st.metric("Customers with more than one order", f"{summary['repeat_customers']:,}")
-    st.metric("Repeat purchase rate", f"{repeat:.1%}" if pd.notna(repeat) else "Not available")
-    cohort = analytics["cohort"]
-    if cohort.empty:
-        st.info("Cohort retention requires valid order dates.")
-    else:
+if "Retention & cohorts" in tab_by_name:
+    with tab_by_name["Retention & cohorts"]:
+        st.subheader("Repeat purchase and cohort retention")
+        st.metric("Customers with more than one order", f"{summary['repeat_customers']:,}")
+        st.metric("Repeat purchase rate", f"{summary['repeat_rate']:.1%}" if pd.notna(summary["repeat_rate"]) else "Not available")
+        cohort = analytics["cohort"]
         fig = go.Figure(data=go.Heatmap(
             z=cohort.to_numpy(dtype=float),
             x=[f"Month {int(x)}" for x in cohort.columns],
             y=cohort.index.tolist(),
-            colorscale="Blues",
-            zmin=0,
-            zmax=1,
+            colorscale="Blues", zmin=0, zmax=1,
             colorbar={"title": "Retention"},
             hovertemplate="Cohort: %{y}<br>%{x}<br>Retention: %{z:.1%}<extra></extra>",
         ))
         fig.update_layout(title="Customer cohort retention", xaxis_title="Months since first purchase", yaxis_title="First purchase cohort")
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Each cell is the share of a cohort with at least one order in that calendar month. Later cohorts have fewer observed months.")
+        st.caption("Each cell is the share of a cohort with at least one order in that calendar month.")
 
-with tabs[3]:
-    st.subheader("Customer 360 explorer")
-    customer_frame = analytics["customers"]
-    if customer_frame.empty:
-        st.info("No customer-level results available.")
-    else:
-        search = st.text_input("Search customer ID")
+if "Customer explorer" in tab_by_name:
+    with tab_by_name["Customer explorer"]:
+        customer_frame = analytics["customers"]
+        search = st.text_input("Search customer identifier")
         view = customer_frame
         if search:
             view = view[view["customer_id"].astype(str).str.contains(search, case=False, na=False)]
         st.dataframe(view, use_container_width=True, hide_index=True)
         st.download_button("Download Customer 360 results CSV", customer_frame.to_csv(index=False).encode("utf-8"), "customer_360_results.csv", "text/csv")
 
-with tabs[4]:
-    st.subheader("Saved datasets and exports")
+if "Product analytics" in tab_by_name:
+    with tab_by_name["Product analytics"]:
+        products = tables.get("Products", pd.DataFrame())
+        items = tables.get("Order items", pd.DataFrame())
+        if "product_category" in products:
+            counts = products["product_category"].fillna("Unknown").value_counts().head(20).rename_axis("category").reset_index(name="products")
+            st.plotly_chart(px.bar(counts, x="category", y="products", title="Products by category"), use_container_width=True)
+        elif "product_name" in products:
+            st.dataframe(products[["product_id", "product_name"]].head(100), use_container_width=True)
+        if not items.empty and "quantity" in items:
+            qty = pd.to_numeric(items["quantity"], errors="coerce").sum()
+            st.metric("Units sold in uploaded order lines", f"{qty:,.0f}")
+        if products.empty and items.empty:
+            st.info("No product data was found.")
+        elif "product_id" not in items.columns and "product_id" not in products.columns:
+            st.info("Map a product identifier to unlock product-level joins and deeper product analytics.")
+
+if "Customer satisfaction" in tab_by_name:
+    with tab_by_name["Customer satisfaction"]:
+        reviews = tables["Reviews"]
+        if "rating" in reviews:
+            ratings = pd.to_numeric(reviews["rating"], errors="coerce").dropna()
+            if not ratings.empty:
+                st.metric("Average review rating", f"{ratings.mean():.2f}")
+                distribution = ratings.value_counts().sort_index().rename_axis("rating").reset_index(name="reviews")
+                st.plotly_chart(px.bar(distribution, x="rating", y="reviews", title="Review rating distribution"), use_container_width=True)
+            else:
+                st.info("Review records exist, but no numeric ratings were mapped.")
+        else:
+            st.info("Map a review rating field to enable satisfaction analytics.")
+
+if "Payment analytics" in tab_by_name:
+    with tab_by_name["Payment analytics"]:
+        payments = tables["Payments"]
+        amount_col = "payment_amount" if "payment_amount" in payments else "payment_value" if "payment_value" in payments else None
+        if amount_col:
+            values = pd.to_numeric(payments[amount_col], errors="coerce")
+            st.metric("Recorded payment amount", f"{values.sum(min_count=1):,.2f}")
+            if "payment_method" in payments:
+                methods = payments.groupby("payment_method")[amount_col].sum().reset_index()
+                st.plotly_chart(px.bar(methods, x="payment_method", y=amount_col, title="Payment value by method"), use_container_width=True)
+        else:
+            st.info("Map payment amount to enable payment analytics.")
+
+with tab_by_name["Saved datasets"]:
+    st.subheader("Canonical datasets and import reports")
     for name, frame in tables.items():
         with st.expander(f"{name} · {len(frame):,} rows"):
             st.caption(f"Source: {metadata[name]['filename']} · Last saved: {metadata[name]['updated_at']}")
             st.dataframe(frame.head(100), use_container_width=True, hide_index=True)
             st.download_button(f"Download {name} as CSV", frame.to_csv(index=False).encode("utf-8"),
-                               file_name=f"{name.lower().replace(' ', '_')}_normalized.csv", mime="text/csv", key=f"download_{name}")
+                               file_name=f"{name.lower().replace(' ', '_')}.csv", mime="text/csv", key=f"download_{name}")
     st.download_button("Download full Customer 360 results", analytics["customers"].to_csv(index=False).encode("utf-8"), "customer_360_results.csv", "text/csv")
 
 st.page_link("platform_pages/business_workspace.py", label="Manage workspace and datasets", icon=":material/settings:")
-st.warning("RFM and retention are descriptive analytics. The inactivity flag is a configurable rule, not a machine-learning churn prediction. Observed customer revenue is historical, not predictive lifetime value. Workspace access still uses a shared key; individual accounts and role-based access are future work.")
+st.warning("RFM and cohorts are hidden below 30 orders. Inactivity is a configurable rule, not predictive churn. Observed customer revenue is historical, not predictive lifetime value. LLM mapping is not connected in this build.")
