@@ -24,7 +24,7 @@ CANONICAL = {
         "customer_state": ["state", "province", "region", "customer state", "estado"],
         "customer_pincode": ["pincode", "pin code", "postal code", "zip", "zip code", "postcode"],
         "customer_country": ["country", "customer country", "nation", "pais", "país"],
-        "signup_date": ["signup date", "sign up date", "registration date", "registered date", "customer since", "fecha de registro"],
+        "signup_date": ["signup date", "sign up date", "signupdate", "registration date", "registrationdate", "registered date", "customer since", "fecha de registro"],
     },
     "Orders": {
         "order_id": ["order id", "orderid", "ord no", "order no", "order number", "order_number", "transaction id", "transaction_id", "pedido", "numero de pedido"],

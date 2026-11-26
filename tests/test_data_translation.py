@@ -62,3 +62,19 @@ def test_canonicalization_preserves_original_columns():
     assert translated.loc[0, "order_id"] == "A1"
     assert translated.loc[0, "order_total"] == 1299.0
     assert translated.loc[0, "source__Extra"] == "keep me"
+
+
+
+def test_customer_mapping_includes_country_and_signup_date():
+    frame = pd.DataFrame({
+        "CustomerID": ["C1", "C2"],
+        "FullName": ["A", "B"],
+        "Email": ["a@example.com", "b@example.com"],
+        "City": ["Hyderabad", "Pune"],
+        "Country": ["India", "India"],
+        "SignUpDate": ["2026-01-01", "2026-02-01"],
+    })
+    proposals, _ = suggest_mapping(frame, "Customers")
+    assert proposals["customer_id"]["source_column"] == "CustomerID"
+    assert proposals["customer_country"]["source_column"] == "Country"
+    assert proposals["signup_date"]["source_column"] == "SignUpDate"
