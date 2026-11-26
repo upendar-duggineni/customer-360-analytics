@@ -54,6 +54,14 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
     orders = orders.dropna(subset=["order_id", "customer_id"]).copy()
     orders["order_id"] = orders["order_id"].astype(str)
     orders["customer_id"] = orders["customer_id"].astype(str)
+    duplicate_order_ids = int(orders["order_id"].duplicated(keep=False).sum())
+    if duplicate_order_ids:
+        result["limitations"].append(
+            f"{duplicate_order_ids:,} order rows have duplicate order_id values; "
+            "the first row per order_id is used for order-level customer metrics. "
+            "Review the source Orders file."
+        )
+        orders = orders.drop_duplicates("order_id", keep="first").copy()
     if "order_purchase_timestamp" in orders:
         orders["order_purchase_timestamp"] = _as_date(orders["order_purchase_timestamp"])
     else:
@@ -98,11 +106,14 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
         frequency=("order_id", "nunique"),
         first_purchase=("order_purchase_timestamp", "min"),
         last_purchase=("order_purchase_timestamp", "max"),
-        observed_revenue=("order_revenue", "sum"),
     ).reset_index()
-    customer_metrics["observed_revenue"] = customer_metrics["observed_revenue"].where(
-        grouped["order_revenue"].count().sum() > 0, np.nan
-    )
+    if orders["order_revenue"].notna().any():
+        customer_revenue = grouped["order_revenue"].sum(min_count=1).rename("observed_revenue")
+        customer_metrics = customer_metrics.merge(
+            customer_revenue, on="customer_id", how="left", validate="one_to_one"
+        )
+    else:
+        customer_metrics["observed_revenue"] = np.nan
     customer_metrics["recency_days"] = (
         snapshot - customer_metrics["last_purchase"]
     ).dt.days
