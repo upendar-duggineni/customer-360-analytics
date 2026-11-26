@@ -198,7 +198,7 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
         customer_attributes = customers.copy()
         customer_attributes["customer_id"] = customer_attributes["customer_id"].astype(str)
         customer_attributes = customer_attributes.drop_duplicates("customer_id", keep="last")
-        extra = [c for c in ["customer_unique_id", "customer_name", "customer_email", "customer_phone", "customer_city", "customer_state", "customer_pincode"] if c in customer_attributes.columns]
+        extra = [c for c in ["customer_unique_id", "customer_name", "customer_email", "customer_phone", "customer_city", "customer_state", "customer_country", "customer_pincode", "signup_date"] if c in customer_attributes.columns]
         if extra:
             customer_metrics = customer_metrics.merge(
                 customer_attributes[["customer_id"] + extra],

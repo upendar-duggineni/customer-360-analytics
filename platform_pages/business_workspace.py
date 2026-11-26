@@ -166,8 +166,9 @@ if uploaded is not None:
                 st.error("Map at least one field before continuing.")
             else:
                 ambiguous = []
-                if chosen.get("order_purchase_timestamp"):
-                    ambiguous = detect_ambiguous_dates(raw[chosen["order_purchase_timestamp"]])
+                date_field = chosen.get("order_purchase_timestamp") or chosen.get("signup_date") or chosen.get("review_date")
+                if date_field:
+                    ambiguous = detect_ambiguous_dates(raw[date_field])
                 st.session_state["translation_pending"] = {
                     "filename": uploaded.name,
                     "sheet": selected_sheet,
