@@ -34,7 +34,8 @@ def test_repeat_rate_and_cohort_are_calculated():
     result = build_customer_360(sample_tables(), as_of_date="2024-03-31")
     assert result["summary"]["repeat_customers"] == 1
     assert abs(result["summary"]["repeat_rate"] - (1 / 3)) < 1e-9
-    assert not result["cohort"].empty
+    assert result["cohort"].empty
+    assert any("fewer than 30 orders" in note for note in result["limitations"])
 
 
 def test_missing_revenue_source_does_not_invent_revenue():
@@ -51,3 +52,20 @@ def test_missing_order_date_disables_recency_and_cohorts():
     result = build_customer_360(tables)
     assert result["cohort"].empty
     assert result["customers"]["recency_days"].isna().all()
+
+
+
+def test_cohort_is_enabled_at_thirty_orders():
+    tables = {
+        "Orders": pd.DataFrame({
+            "order_id": [f"o{i}" for i in range(30)],
+            "customer_id": [f"c{i % 10}" for i in range(30)],
+            "order_purchase_timestamp": pd.date_range("2024-01-01", periods=30, freq="7D"),
+        }),
+        "Payments": pd.DataFrame({
+            "order_id": [f"o{i}" for i in range(30)],
+            "payment_value": [25.0 + i for i in range(30)],
+        }),
+    }
+    result = build_customer_360(tables, as_of_date="2025-01-01")
+    assert not result["cohort"].empty
