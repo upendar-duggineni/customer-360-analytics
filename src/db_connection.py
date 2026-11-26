@@ -18,6 +18,8 @@ def _database_url():
         url = make_url(supplied_url)
         if url.drivername in {"postgres", "postgresql"}:
             url = url.set(drivername="postgresql+psycopg2")
+        if sslmode and "sslmode" not in url.query:
+            url = url.set(query={**url.query, "sslmode": sslmode})
         return url
 
     required = ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD"]
