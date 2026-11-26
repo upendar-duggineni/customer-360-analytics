@@ -204,3 +204,36 @@ The dashboard is structured for deployment using Streamlit Community Cloud with 
 Upendar
 
 Built as an end-to-end Data Analytics and Business Intelligence portfolio project.
+
+---
+
+## Customer 360 Platform Experience (New)
+
+The repository now includes a platform entry point that separates the existing Olist demonstration from the planned business-data experience.
+
+### Run the platform
+
+```bash
+streamlit run platform_app.py
+```
+
+The platform navigation provides:
+
+- **Home** — choose between the Olist demo and business analytics.
+- **Explore Olist Demo** — opens the existing Olist dashboard.
+- **Customer 360 Explorer** — opens the existing entity-detail experience.
+- **Analyze My Business** — introduces the business workspace and explains the planned onboarding flow.
+
+### Run the original Olist dashboard directly
+
+The original entry point remains available:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+### Business workspace status
+
+The business workspace is currently a foundation page only. It does not yet accept, store, or process company files. Authentication, team permissions, tenant isolation, validated CSV/Excel ingestion, and direct e-commerce integrations must be implemented and tested before real company data is used.
+
+The Olist dataset remains the demonstration dataset. It is not presented as a live connection to a business.
