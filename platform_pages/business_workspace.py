@@ -251,14 +251,23 @@ if uploaded is not None:
                 st.error("Rejected rows are not silently dropped. Download the rejection report, correct the source or mapping, and re-import.")
                 st.dataframe(rejected.head(50), use_container_width=True, hide_index=True)
                 st.download_button("Download rejected rows and reasons", rejected.to_csv(index=False).encode("utf-8"), "rejected_rows.csv", "text/csv")
-            if not accepted.empty:
-                if st.button(f"Save {pending['table']} canonical data to workspace", type="primary", key="save_translated_dataset"):
+            if not accepted.empty or not rejected.empty:
+                if st.button(f"Save import results to workspace", type="primary", key="save_translated_dataset"):
                     try:
-                        save_dataset(workspace["workspace_id"], pending["table"], f"{pending['filename']} · {pending['sheet']}", accepted)
-                        save_mapping_profile(workspace["workspace_id"], pending["fingerprint"], pending["table"], pending["mapping"])
+                        if not accepted.empty:
+                            save_dataset(workspace["workspace_id"], pending["table"], f"{pending['filename']} · {pending['sheet']}", accepted)
                         if not rejected.empty:
-                            st.session_state["last_rejection_report"] = rejected
-                        st.success(f"Saved {len(accepted):,} accepted rows to {pending['table']}. Mapping profile saved for reuse.")
+                            save_dataset(
+                                workspace["workspace_id"],
+                                f"Rejected - {pending['table']}",
+                                f"Rejected rows from {pending['filename']} · {pending['sheet']}",
+                                rejected,
+                            )
+                        save_mapping_profile(workspace["workspace_id"], pending["fingerprint"], pending["table"], pending["mapping"])
+                        st.success(
+                            f"Saved {len(accepted):,} accepted rows and {len(rejected):,} rejected rows "
+                            f"to the workspace. Confirmed mapping saved for reuse."
+                        )
                         st.rerun()
                     except Exception as exc:
                         st.error(f"Could not save translated data: {exc}")

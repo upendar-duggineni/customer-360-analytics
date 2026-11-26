@@ -1,4 +1,4 @@
-name: Customer 360 analytics tests
+name: Customer 360 data and analytics tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  business-analytics:
+  business-platform-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -16,9 +16,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install analytics dependencies
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy pandas pytest
-      - name: Run business analytics tests
-        run: pytest -q tests/test_business_analytics.py
+          pip install numpy pandas pytest openpyxl
+      - name: Run translation and analytics tests
+        run: pytest -q tests/test_data_translation.py tests/test_business_analytics.py

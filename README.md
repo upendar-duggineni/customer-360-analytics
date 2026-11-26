@@ -316,3 +316,47 @@ pytest -q
 Tests for core business analytics are in `tests/test_business_analytics.py`.
 
 The analytics dashboard remains a prototype. Review metric definitions, source data quality, workspace access controls and privacy/security requirements before using outputs for business-critical decisions.
+
+## Universal E-commerce Data Translation (Architecture update)
+
+The business upload centre now profiles files before mapping and translates user-confirmed fields into a fixed canonical e-commerce model. The existing Olist demo remains separate.
+
+### Current implementation
+
+- CSV and Excel workbook inspection, including listing and selecting multiple sheets.
+- Header-row detection for exports with title/metadata rows above the column headers.
+- Candidate trailing total/subtotal row detection and exclusion from the data preview.
+- Per-column profiling: inferred type, null percentage, uniqueness, and sample values.
+- Deterministic mapping suggestions using multilingual/alternate header aliases and value-pattern evidence.
+- Human confirmation of mappings before import.
+- Ambiguous date-format choice when dates can be interpreted day-first or month-first.
+- Explicit source order-status assignment to canonical status categories.
+- Amount normalization for common INR, BRL and plain numeric formats.
+- Indian phone-number normalization while retaining identifiers as text.
+- Original source columns retained as `source__*` fields after translation.
+- Accepted and rejected rows saved separately, with rejection reasons.
+- Confirmed mapping profiles saved per workspace and reused for matching sheet/table/header structures.
+
+### Canonical e-commerce entities
+
+Customers, Orders, Order items, Products, Payments and Reviews. A sheet is assigned to one canonical entity at a time. Multiple sheets in a workbook can be processed sequentially.
+
+### Mapping confidence and LLM policy
+
+Mapping confidence is a heuristic evidence score, not a statistical probability. Header aliases and content profiling provide local deterministic suggestions. The interface includes an explicit LLM opt-in control, but no external LLM provider is connected in this version; no uploaded data or samples are sent to an AI provider. A future provider integration must transmit only masked/minimized samples after consent and must never approve mappings automatically.
+
+### Current limitations
+
+- Multi-sheet workbooks are supported by selecting and processing each sheet sequentially; automatic relationship discovery across sheets is not yet implemented.
+- Header-row and total-row detection are heuristic. Users must review the detected structure.
+- Date parsing, status assignments, currency selection and mapping remain user-confirmed.
+- Currency is recorded as a code but no FX conversion is performed.
+- Rejected rows are retained as a separate workspace dataset; review and correction/re-import workflows can be expanded.
+- The fixed model is for e-commerce. Other industries require separate canonical model packs.
+
+### Tests
+
+```bash
+pip install pytest numpy pandas openpyxl
+pytest -q tests/test_data_translation.py tests/test_business_analytics.py
+```
