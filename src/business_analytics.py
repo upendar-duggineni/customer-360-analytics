@@ -71,7 +71,7 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
         if "customer_email" in profile:
             email = profile["customer_email"].astype("string").str.strip().str.lower()
             email_present = email.notna() & email.ne("")
-            valid_email = email.str.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", na=False)
+            valid_email = email.str.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", na=False)
             duplicate_email = email_present & email.duplicated(keep=False)
             profile["data_quality_invalid_email"] = email_present & ~valid_email
             profile["data_quality_duplicate_email"] = duplicate_email
