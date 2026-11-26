@@ -1,12 +1,10 @@
-"""Streamlit chat interface for the active business workspace."""
+"""Compact corner chat launcher for the active business workspace."""
 from __future__ import annotations
 
 import os
-
 import streamlit as st
 
 from src.ai_assistant.assistant import answer_question, get_api_key
-
 
 SUGGESTED_QUESTIONS = [
     "Give me an overview of my business performance.",
@@ -18,40 +16,52 @@ SUGGESTED_QUESTIONS = [
 
 
 def render_ai_assistant(tables: dict, workspace_id: str) -> None:
-    """Render a chat whose history is isolated to the active workspace session."""
-    st.subheader("AI Business Analyst")
-    st.caption("Ask questions about the datasets saved in this workspace. Calculations come from read-only Python analytics tools.")
-    if not get_api_key():
-        st.info("Connect an OpenAI API key to enable the assistant. Set OPENAI_API_KEY in your local .env file or add it to Streamlit secrets. Your key is never requested in the chat.")
-        with st.expander("Configure OpenAI"):
-            st.code('OPENAI_API_KEY="your-api-key"\nOPENAI_MODEL="gpt-5.5"', language="bash")
-            st.caption("Restart Streamlit after changing your local .env file. Never commit the key to GitHub.")
-        return
-
+    """Render an AI chat popover aligned to the top-right of the dashboard."""
     state_key = f"business_ai_history_{workspace_id}"
     st.session_state.setdefault(state_key, [])
-    left, right = st.columns([5, 1])
-    left.caption(f"Model: {os.getenv('OPENAI_MODEL', 'gpt-5.5')} · Workspace-scoped · Read-only")
-    if right.button("Clear chat", key=f"clear_ai_{workspace_id}"):
-        st.session_state[state_key] = []
-        st.rerun()
 
-    for message in st.session_state[state_key]:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    with st.popover("💬 Ask AI", use_container_width=True):
+        st.markdown("### Customer 360 Assistant")
+        st.caption("Your workspace data analyst · Read-only analytics")
 
-    prompt = st.chat_input("Ask about customers, orders, revenue, products or payments", key=f"business_ai_input_{workspace_id}")
-    if prompt:
-        history = list(st.session_state[state_key])
-        st.session_state[state_key].append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        with st.chat_message("assistant"):
-            with st.spinner("Checking your workspace analytics..."):
-                try:
-                    response = answer_question(prompt, tables, history=history)
-                except Exception as exc:
-                    response = f"I couldn't complete that request: {exc}"
-                st.markdown(response)
-        st.session_state[state_key].append({"role": "assistant", "content": response})
-        st.session_state[state_key] = st.session_state[state_key][-12:]
+        if not get_api_key():
+            st.info("The assistant is not connected yet.")
+            st.code("OPENAI_API_KEY=your_openai_api_key\nOPENAI_MODEL=gpt-5.5", language="bash")
+            st.caption("Add the key to your local .env file or hosting secrets, then restart the app. Never commit it to GitHub.")
+            return
+
+        st.caption(f"Model: {os.getenv('OPENAI_MODEL', 'gpt-5.5')}")
+        if st.button("Clear conversation", key=f"clear_ai_{workspace_id}", use_container_width=True):
+            st.session_state[state_key] = []
+            st.rerun()
+
+        history = st.session_state[state_key]
+        if not history:
+            st.markdown("**Try asking:**")
+            for index, suggestion in enumerate(SUGGESTED_QUESTIONS):
+                if st.button(suggestion, key=f"ai_suggestion_{workspace_id}_{index}", use_container_width=True):
+                    st.session_state[f"business_ai_pending_{workspace_id}"] = suggestion
+                    st.rerun()
+
+        with st.container(height=360, border=True):
+            for message in history:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+        pending_key = f"business_ai_pending_{workspace_id}"
+        with st.form(f"business_ai_form_{workspace_id}", clear_on_submit=True):
+            prompt = st.text_input("Ask about customers, orders, revenue, products or payments", key=f"business_ai_prompt_{workspace_id}")
+            submitted = st.form_submit_button("Send", type="primary", use_container_width=True)
+
+        pending = st.session_state.pop(pending_key, None)
+        question = pending or (prompt.strip() if submitted else "")
+        if question:
+            previous_history = list(st.session_state[state_key])
+            st.session_state[state_key].append({"role": "user", "content": question})
+            try:
+                response = answer_question(question, tables, history=previous_history)
+            except Exception as exc:
+                response = f"I couldn't complete that request: {exc}"
+            st.session_state[state_key].append({"role": "assistant", "content": response})
+            st.session_state[state_key] = st.session_state[state_key][-12:]
+            st.rerun()
