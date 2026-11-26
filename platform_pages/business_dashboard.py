@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.business_storage import initialize_storage, load_workspace_datasets
 from src.business_analytics import build_customer_360
+from src.customer_360_detail import build_customer_360_detail
 from src.relationship_integrity import audit_relationships
 
 st.title("📈 My Business Analytics Dashboard")
@@ -168,6 +169,8 @@ if not analytics["cohort"].empty:
     tab_names.append("Retention & cohorts")
 if not analytics["customers"].empty:
     tab_names.append("Customer explorer")
+if not analytics["customers"].empty and {"Customers", "Orders"}.issubset(tables):
+    tab_names.append("Customer 360")
 if "Products" in tables or "Order items" in tables:
     tab_names.append("Product analytics")
 if "Reviews" in tables:
@@ -234,6 +237,59 @@ if "Customer explorer" in tab_by_name:
             view = view[view["customer_id"].astype(str).str.contains(search, case=False, na=False)]
         st.dataframe(view, use_container_width=True, hide_index=True)
         st.download_button("Download Customer 360 results CSV", customer_frame.to_csv(index=False).encode("utf-8"), "customer_360_results.csv", "text/csv")
+
+
+if "Customer 360" in tab_by_name:
+    with tab_by_name["Customer 360"]:
+        st.subheader("Integrated Customer 360")
+        st.caption("Select a customer to inspect their profile and related transactions. One-to-many datasets remain separate to avoid inflated joins.")
+        customer_ids = (
+            analytics["customers"]["customer_id"]
+            .dropna().astype(str).str.strip().drop_duplicates().sort_values().tolist()
+        )
+        if not customer_ids:
+            st.info("No valid customer identifiers are available for the explorer.")
+        else:
+            selected_customer = st.selectbox(
+                "Select customer ID",
+                customer_ids,
+                key="integrated_customer_360_id",
+            )
+            detail = build_customer_360_detail(tables, selected_customer)
+            detail_summary = detail["summary"]
+            d1, d2, d3, d4 = st.columns(4)
+            d1.metric("Orders", f"{detail_summary['orders']:,}")
+            d2.metric("Order items", f"{detail_summary['order_items']:,}")
+            d3.metric("Payments", f"{detail_summary['payments']:,}")
+            d4.metric("Reviews", f"{detail_summary['reviews']:,}")
+            if detail_summary["recorded_payment_total"] is not None:
+                st.metric("Recorded payment total", f"{detail_summary['recorded_payment_total']:,.2f}")
+                st.caption("Sum of recorded payment rows for this customer's orders; currency is not inferred.")
+            if detail_summary["duplicate_product_keys_excluded"]:
+                st.warning(
+                    f"{detail_summary['duplicate_product_keys_excluded']:,} duplicate product keys were excluded from product enrichment. "
+                    "Order-item rows are preserved and not multiplied."
+                )
+            for label, key in [
+                ("Customer profile", "customer"),
+                ("Orders", "orders"),
+                ("Purchased items and matched product attributes", "order_items"),
+                ("Payments", "payments"),
+                ("Reviews", "reviews"),
+            ]:
+                frame = detail[key]
+                with st.expander(f"{label} · {len(frame):,} rows", expanded=(key == "customer" or key == "orders")):
+                    if frame.empty:
+                        st.info("No related records are available for this customer in the uploaded datasets.")
+                    else:
+                        st.dataframe(frame.head(500), use_container_width=True, hide_index=True)
+                        st.download_button(
+                            f"Download {label.lower()} CSV",
+                            frame.to_csv(index=False).encode("utf-8"),
+                            f"customer_{selected_customer}_{key}.csv",
+                            "text/csv",
+                            key=f"customer_360_download_{key}",
+                        )
 
 if "Product analytics" in tab_by_name:
     with tab_by_name["Product analytics"]:
