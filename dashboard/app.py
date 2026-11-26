@@ -301,22 +301,44 @@ filter_clause, filter_params = build_filter()
 # ============================================================
 
 CORE_KPI_QUERY = f"""
+WITH payment_by_order AS (
+    SELECT
+        order_id,
+        SUM(payment_value) AS order_payment_value
+    FROM payments
+    GROUP BY order_id
+),
+review_by_order AS (
+    SELECT
+        order_id,
+        AVG(review_score)::numeric AS order_average_rating
+    FROM reviews
+    GROUP BY order_id
+),
+filtered_orders AS (
+    SELECT
+        o.order_id,
+        c.customer_unique_id,
+        p.order_payment_value,
+        r.order_average_rating
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.customer_id
+    LEFT JOIN payment_by_order p ON o.order_id = p.order_id
+    LEFT JOIN review_by_order r ON o.order_id = r.order_id
+    WHERE {filter_clause}
+      AND o.order_status = 'delivered'
+)
 SELECT
-    ROUND(SUM(p.payment_value), 2) AS total_revenue,
-    COUNT(DISTINCT o.order_id) AS total_orders,
-    COUNT(DISTINCT c.customer_unique_id) AS total_customers,
+    ROUND(COALESCE(SUM(order_payment_value), 0), 2) AS total_revenue,
+    COUNT(DISTINCT order_id) AS total_orders,
+    COUNT(DISTINCT customer_unique_id) AS total_customers,
     ROUND(
-        SUM(p.payment_value) /
-        NULLIF(COUNT(DISTINCT o.order_id), 0),
+        SUM(order_payment_value) /
+        NULLIF(COUNT(DISTINCT order_id), 0),
         2
     ) AS average_order_value,
-    ROUND(AVG(r.review_score), 2) AS average_rating
-FROM orders o
-JOIN customers c ON o.customer_id = c.customer_id
-JOIN payments p ON o.order_id = p.order_id
-LEFT JOIN reviews r ON o.order_id = r.order_id
-WHERE {filter_clause}
-  AND o.order_status = 'delivered';
+    ROUND(AVG(order_average_rating), 2) AS average_rating
+FROM filtered_orders;
 """
 
 @st.cache_data(ttl=600)
@@ -1009,7 +1031,7 @@ lookup_id = st.text_input(
 if st.button("View Customer Detail →"):
     if lookup_id.strip():
         st.session_state["lookup_customer_id"] = lookup_id.strip()
-        st.switch_page("pages/customer_details.py")
+        st.switch_page("pages/customer_details_fixed.py")
     else:
         st.warning("Enter a customer ID first.")
 

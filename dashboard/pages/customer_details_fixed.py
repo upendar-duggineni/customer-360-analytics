@@ -288,30 +288,47 @@ WHERE r.customer_unique_id = %(cid)s
 LIMIT 1;
 """
 
-
 ORDER_HISTORY_QUERY = """
+WITH payment_summary AS (
+    SELECT
+        order_id,
+        SUM(payment_value) AS payment_value,
+        STRING_AGG(DISTINCT payment_type, ', ') AS payment_type
+    FROM payments
+    GROUP BY order_id
+),
+
+review_summary AS (
+    SELECT
+        order_id,
+        ROUND(AVG(review_score)::numeric, 2) AS review_score
+    FROM reviews
+    GROUP BY order_id
+)
+
 SELECT
     o.order_id,
     o.order_purchase_timestamp::date AS order_date,
     o.order_status,
-    COALESCE(SUM(p.payment_value), 0) AS payment_value,
-    STRING_AGG(DISTINCT p.payment_type, ', ') AS payment_type,
-    MAX(r.review_score) AS review_score
+    COALESCE(p.payment_value, 0) AS payment_value,
+    p.payment_type,
+    r.review_score
+
 FROM customers c
+
 JOIN orders o
     ON c.customer_id = o.customer_id
-LEFT JOIN payments p
+
+LEFT JOIN payment_summary p
     ON o.order_id = p.order_id
-LEFT JOIN reviews r
+
+LEFT JOIN review_summary r
     ON o.order_id = r.order_id
+
 WHERE c.customer_unique_id = %(cid)s
-GROUP BY
-    o.order_id,
-    o.order_purchase_timestamp,
-    o.order_status
+
 ORDER BY o.order_purchase_timestamp DESC;
 """
-
 
 # Aggregated CTEs prevent payment/review joins from multiplying
 # product rows and inflating order totals.
@@ -684,8 +701,8 @@ else:
         "City": str(row["customer_city"]).title(),
         "State": row["customer_state"],
         "Segment": segment,
-        "Total Spend": f"R${row['monetary']:,.2f}",
-        "Orders": row["frequency"],
+        "Delivered Order Spend": f"R${row['monetary']:,.2f}",
+        "Delivered Orders": row["frequency"],
         "RFM": (
             f"{row['rfm_total_score']} "
             f"({row['recency_score']}/"
@@ -1082,8 +1099,4 @@ st.divider()
 st.caption(
     "Customer 360 Analytics Platform • "
     "Customer → Order → Product → Seller → Payment → Review"
-<<<<<<< HEAD
 )
-=======
-)
->>>>>>> a1b000e1a76cdab1a47d88eb0bc38d3e8778a88f

@@ -1,3 +1,4 @@
+
 from src.data_loader import load_data
 from src.data_validation import validate_data
 from src.data_cleaning import clean_data
@@ -6,16 +7,15 @@ from src.postgres_loader import load_to_postgres
 
 
 def main():
-
-    print("=" * 60)
+    print("=" * 65)
     print("CUSTOMER 360 ANALYTICS PLATFORM")
-    print("=" * 60)
-
-    print("\nLoading datasets...\n")
+    print("=" * 65)
 
     # --------------------------------------------------
-    # LOAD DATA
+    # 1. LOAD DATA
     # --------------------------------------------------
+
+    print("\n[1/5] Loading datasets...\n")
 
     (
         customers,
@@ -26,15 +26,16 @@ def main():
         products,
         sellers,
         geolocation,
-        category_translation
+        category_translation,
     ) = load_data()
 
-    print("✅ Data Loaded Successfully.\n")
-
+    print("All nine datasets loaded successfully.")
 
     # --------------------------------------------------
-    # VALIDATE DATA
+    # 2. VALIDATE RAW DATA
     # --------------------------------------------------
+
+    print("\n[2/5] Validating raw datasets...\n")
 
     validate_data(
         customers,
@@ -42,13 +43,18 @@ def main():
         order_items,
         payments,
         reviews,
-        products
+        products,
+        sellers,
+        geolocation,
+        category_translation,
+        stage="before cleaning",
     )
 
+    # --------------------------------------------------
+    # 3. CLEAN DATA
+    # --------------------------------------------------
 
-    # --------------------------------------------------
-    # CLEAN DATA
-    # --------------------------------------------------
+    print("\n[3/5] Cleaning datasets...\n")
 
     (
         customers,
@@ -56,20 +62,40 @@ def main():
         order_items,
         payments,
         reviews,
-        products
+        products,
     ) = clean_data(
         customers,
         orders,
         order_items,
         payments,
         reviews,
-        products
+        products,
     )
 
+    # --------------------------------------------------
+    # 4. VALIDATE CLEANED DATA
+    # --------------------------------------------------
+
+    print("\n[4/5] Validating cleaned datasets...\n")
+
+    validate_data(
+        customers,
+        orders,
+        order_items,
+        payments,
+        reviews,
+        products,
+        sellers,
+        geolocation,
+        category_translation,
+        stage="after cleaning",
+    )
 
     # --------------------------------------------------
-    # LOAD INTO POSTGRESQL
+    # 5. LOAD INTO POSTGRESQL
     # --------------------------------------------------
+
+    print("\n[5/5] Loading data into PostgreSQL...\n")
 
     load_to_postgres(
         engine,
@@ -81,13 +107,12 @@ def main():
         products,
         sellers,
         geolocation,
-        category_translation
+        category_translation,
     )
 
-
-    print("\n" + "=" * 60)
-    print("🎉 ETL PIPELINE COMPLETED SUCCESSFULLY")
-    print("=" * 60)
+    print("\n" + "=" * 65)
+    print("ETL PIPELINE COMPLETED SUCCESSFULLY")
+    print("=" * 65)
 
 
 if __name__ == "__main__":

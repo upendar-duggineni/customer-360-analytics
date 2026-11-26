@@ -1,3 +1,4 @@
+
 from sqlalchemy import text
 
 
@@ -13,146 +14,71 @@ def load_to_postgres(
     geolocation,
     category_translation,
 ):
+    """Refresh all nine PostgreSQL tables atomically."""
 
-    print("\nLoading data into PostgreSQL...\n")
+    datasets = {
+        "customers": customers,
+        "products": products,
+        "sellers": sellers,
+        "orders": orders,
+        "payments": payments,
+        "reviews": reviews,
+        "order_items": order_items,
+        "geolocation": geolocation,
+        "product_category_name_translation": category_translation,
+    }
 
-    # --------------------------------------------------
-    # EMPTY EXISTING TABLES
-    # --------------------------------------------------
+    print("\nStarting PostgreSQL full refresh...\n")
 
+    # One transaction covers truncation, insertion and verification.
     with engine.begin() as conn:
 
-        conn.execute(text("TRUNCATE TABLE order_items CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE reviews CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE payments CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE orders CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE sellers CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE products CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE customers CASCADE;"))
-        conn.execute(text("TRUNCATE TABLE geolocation CASCADE;"))
+        # Explicitly include every table involved in the audited
+        # foreign-key relationships. No CASCADE or identity reset.
+        conn.execute(text("""
+            TRUNCATE TABLE
+                order_items,
+                reviews,
+                payments,
+                orders,
+                products,
+                sellers,
+                customers,
+                geolocation,
+                product_category_name_translation;
+        """))
 
-    # --------------------------------------------------
-    # CUSTOMERS
-    # --------------------------------------------------
+        for table_name, dataframe in datasets.items():
 
-    customers.to_sql(
-        "customers",
-        engine,
-        if_exists="append",
-        index=False
-    )
+            dataframe.to_sql(
+                name=table_name,
+                con=conn,
+                if_exists="append",
+                index=False,
+                chunksize=10000,
+            )
 
-    print(f"✅ Customers : {len(customers)}")
+            print(f"Loaded {table_name}: {len(dataframe):,} rows")
 
-    # --------------------------------------------------
-    # PRODUCTS
-    # --------------------------------------------------
-    # IMPORTANT:
-    # Keep the original Olist column names:
-    # product_name_lenght
-    # product_description_lenght
+        print("\nVerifying database row counts...\n")
 
-    products.to_sql(
-        "products",
-        engine,
-        if_exists="append",
-        index=False
-    )
+        for table_name, dataframe in datasets.items():
 
-    print(f"✅ Products : {len(products)}")
+            actual_count = conn.execute(
+                text(f'SELECT COUNT(*) FROM "{table_name}"')
+            ).scalar_one()
 
-    # --------------------------------------------------
-    # SELLERS
-    # --------------------------------------------------
+            expected_count = len(dataframe)
 
-    sellers.to_sql(
-        "sellers",
-        engine,
-        if_exists="append",
-        index=False
-    )
+            print(
+                f"{table_name}: "
+                f"expected={expected_count:,}, "
+                f"actual={actual_count:,}"
+            )
 
-    print(f"✅ Sellers : {len(sellers)}")
+            if actual_count != expected_count:
+                raise RuntimeError(
+                    f"Row count mismatch in {table_name}"
+                )
 
-    # --------------------------------------------------
-    # ORDERS
-    # --------------------------------------------------
-
-    orders.to_sql(
-        "orders",
-        engine,
-        if_exists="append",
-        index=False
-    )
-
-    print(f"✅ Orders : {len(orders)}")
-
-    # --------------------------------------------------
-    # PAYMENTS
-    # --------------------------------------------------
-
-    payments.to_sql(
-        "payments",
-        engine,
-        if_exists="append",
-        index=False
-    )
-
-    print(f"✅ Payments : {len(payments)}")
-
-    # --------------------------------------------------
-    # REVIEWS
-    # --------------------------------------------------
-
-    reviews.to_sql(
-        "reviews",
-        engine,
-        if_exists="append",
-        index=False
-    )
-
-    print(f"✅ Reviews : {len(reviews)}")
-
-    # --------------------------------------------------
-    # ORDER ITEMS
-    # --------------------------------------------------
-
-    order_items.to_sql(
-        "order_items",
-        engine,
-        if_exists="append",
-        index=False
-    )
-
-    print(f"✅ Order Items : {len(order_items)}")
-
-    # --------------------------------------------------
-    # GEOLOCATION
-    # --------------------------------------------------
-
-    geolocation.to_sql(
-        "geolocation",
-        engine,
-        if_exists="append",
-        index=False
-    )
-
-    print(f"✅ Geolocation : {len(geolocation)}")
-
-    # --------------------------------------------------
-    # PRODUCT CATEGORY TRANSLATION
-    # --------------------------------------------------
-
-    category_translation.to_sql(
-        "product_category_name_translation",
-        engine,
-        if_exists="replace",
-        index=False
-    )
-
-    print(
-        f"✅ Category Translation : "
-        f"{len(category_translation)}"
-    )
-
-    print("\n🎉 Data Loaded Successfully!")
+    print("\nPostgreSQL refresh committed successfully.")
