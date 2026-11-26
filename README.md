@@ -295,6 +295,11 @@ The business dashboard now includes a reusable analytics engine in `src/business
 - Cohort retention based on customers active in each month after their first purchase.
 - A configurable inactivity flag (default 90 days) for operational review.
 - Customer 360 result table and CSV exports.
+- Standalone customer-master analytics without requiring Orders or Payments.
+- Customer-only descriptive segments by signup-month cohort and profile completeness.
+- Geographic customer summaries by city and country.
+- Downloadable customer segment assignments; duplicate IDs remain visible in the source profile while segment counts use one representative record per valid ID.
+- Customer-only segmentation is descriptive profile grouping, not behavioural or predictive segmentation. Purchase-behaviour segments require compatible order history.
 
 ### Metric definitions and limitations
 
