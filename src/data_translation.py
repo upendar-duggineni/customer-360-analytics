@@ -257,6 +257,15 @@ def suggest_mapping(frame, table_name):
         for column in frame.columns:
             header = normalize_name(column)
             header_score = 0.96 if header in target_names else 0.0
+            if header_score == 0.0:
+                header_tokens = set(header.split())
+                multiword_aliases = [
+                    normalize_name(alias).split()
+                    for alias in aliases
+                    if len(normalize_name(alias).split()) >= 2
+                ]
+                if any(set(alias_tokens).issubset(header_tokens) for alias_tokens in multiword_aliases):
+                    header_score = 0.86
             content_score, reason = _content_score(field, profiles[str(column)])
             score = max(header_score, content_score)
             if score and (best is None or score > best["confidence"]):
