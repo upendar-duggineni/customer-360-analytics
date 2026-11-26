@@ -52,39 +52,76 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
     if (orders.empty or not {"order_id", "customer_id"}.issubset(orders.columns)) and not customers.empty and "customer_id" in customers.columns:
         profile = customers.copy()
         profile["customer_id"] = profile["customer_id"].astype("string").str.strip()
-        profile = profile[profile["customer_id"].notna() & profile["customer_id"].ne("")].copy()
-        duplicate_ids = int(profile["customer_id"].duplicated(keep=False).sum())
-        profile = profile.drop_duplicates("customer_id", keep="last").copy()
+        valid_id = profile["customer_id"].notna() & profile["customer_id"].ne("")
+        duplicate_id = valid_id & profile["customer_id"].duplicated(keep=False)
+        profile["data_quality_duplicate_id"] = duplicate_id
+        profile["data_quality_missing_id"] = ~valid_id
+
         date_col = "signup_date" if "signup_date" in profile.columns else None
         if date_col:
             profile[date_col] = _as_date(profile[date_col])
         signup_monthly = _empty()
-        if date_col and profile[date_col].notna().any():
-            signup_monthly = (profile.dropna(subset=[date_col]).assign(month=lambda f: f[date_col].dt.to_period("M").astype(str)).groupby("month")["customer_id"].nunique().rename("new_customers").reset_index())
-        city = profile["customer_city"].fillna("Not provided").astype(str).value_counts().rename_axis("city").reset_index(name="customers") if "customer_city" in profile else _empty()
-        country = profile["customer_country"].fillna("Not provided").astype(str).value_counts().rename_axis("country").reset_index(name="customers") if "customer_country" in profile else _empty()
-        email_present = profile["customer_email"].astype("string").str.strip().ne("").fillna(False) if "customer_email" in profile else pd.Series(False, index=profile.index)
+        valid_customers = profile.loc[valid_id].copy()
+        if date_col and valid_customers[date_col].notna().any():
+            signup_monthly = (valid_customers.dropna(subset=[date_col]).assign(month=lambda f: f[date_col].dt.to_period("M").astype(str)).groupby("month")["customer_id"].nunique().rename("new_customers").reset_index())
+
+        city = valid_customers.groupby(valid_customers["customer_city"].fillna("Not provided").astype(str))["customer_id"].nunique().rename("customers").rename_axis("city").reset_index() if "customer_city" in profile else _empty()
+        country = valid_customers.groupby(valid_customers["customer_country"].fillna("Not provided").astype(str))["customer_id"].nunique().rename("customers").rename_axis("country").reset_index() if "customer_country" in profile else _empty()
+
+        if "customer_email" in profile:
+            email = profile["customer_email"].astype("string").str.strip().str.lower()
+            email_present = email.notna() & email.ne("")
+            valid_email = email.str.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", na=False)
+            duplicate_email = email_present & email.duplicated(keep=False)
+            profile["data_quality_invalid_email"] = email_present & ~valid_email
+            profile["data_quality_duplicate_email"] = duplicate_email
+        else:
+            email_present = pd.Series(False, index=profile.index)
+            profile["data_quality_invalid_email"] = False
+            profile["data_quality_duplicate_email"] = False
         phone_present = profile["customer_phone"].astype("string").str.strip().ne("").fillna(False) if "customer_phone" in profile else pd.Series(False, index=profile.index)
+
+        required_profile_fields = [field for field in ["customer_name", "customer_email", "customer_city", "customer_country"] if field in profile.columns]
+        missing_attribute_rows = int(profile[required_profile_fields].isna().any(axis=1).sum()) if required_profile_fields else 0
+        duplicate_id_values = int(profile.loc[duplicate_id, "customer_id"].nunique())
+        duplicate_email_values = int(profile.loc[profile["data_quality_duplicate_email"], "customer_email"].astype("string").str.lower().nunique()) if "customer_email" in profile else 0
+        invalid_signup_dates = int(profile[date_col].isna().sum()) if date_col else 0
+        data_quality = {
+            "source_rows": len(profile),
+            "valid_customer_id_rows": int(valid_id.sum()),
+            "missing_customer_id_rows": int((~valid_id).sum()),
+            "unique_customers": int(profile.loc[valid_id, "customer_id"].nunique()),
+            "duplicate_customer_id_values": duplicate_id_values,
+            "duplicate_customer_id_rows": int(duplicate_id.sum()),
+            "duplicate_email_values": duplicate_email_values,
+            "invalid_email_rows": int(profile["data_quality_invalid_email"].sum()),
+            "missing_attribute_rows": missing_attribute_rows,
+            "invalid_signup_date_rows": invalid_signup_dates,
+        }
         summary = {
-            "customer_only": True, "customers": int(profile["customer_id"].nunique()),
-            "duplicate_customer_rows": duplicate_ids,
+            "customer_only": True,
+            "customers": data_quality["unique_customers"],
+            "duplicate_customer_rows": data_quality["duplicate_customer_id_rows"],
             "email_coverage": float(email_present.mean()) if len(profile) and "customer_email" in profile else np.nan,
             "phone_coverage": float(phone_present.mean()) if len(profile) and "customer_phone" in profile else np.nan,
-            "cities": int(profile["customer_city"].nunique(dropna=True)) if "customer_city" in profile else None,
-            "countries": int(profile["customer_country"].nunique(dropna=True)) if "customer_country" in profile else None,
-            "signup_dates_available": bool(date_col and profile[date_col].notna().any()),
+            "cities": int(valid_customers["customer_city"].nunique(dropna=True)) if "customer_city" in valid_customers else None,
+            "countries": int(valid_customers["customer_country"].nunique(dropna=True)) if "customer_country" in valid_customers else None,
+            "signup_dates_available": bool(date_col and valid_customers[date_col].notna().any()),
+            "data_quality": data_quality,
         }
         result["summary"] = summary
-        result["customers"] = profile.sort_values("customer_id")
+        result["customers"] = profile.sort_values("customer_id", na_position="last")
         result["customer_profile"] = {"signup_monthly": signup_monthly, "city": city, "country": country}
         result["limitations"].append("Orders have not been uploaded. Repeat purchase, RFM, cohorts, inactivity, average order value and revenue metrics are unavailable.")
-        result["insights"].append(f"{summary['customers']:,} unique customers are available in the customer master file.")
-        if duplicate_ids:
-            result["insights"].append(f"{duplicate_ids:,} rows belong to duplicate customer IDs; one row per ID is shown in the customer explorer.")
+        result["insights"].append(f"{summary['customers']:,} unique customers are available from {len(profile):,} source rows.")
+        if duplicate_id_values:
+            result["insights"].append(f"{duplicate_id_values:,} customer IDs occur on multiple rows. All source rows are retained and flagged for review; no duplicate is silently removed.")
         if summary["signup_dates_available"]:
             result["insights"].append("Customer acquisition trends are based on the uploaded signup_date field.")
         else:
             result["limitations"].append("Map a signup or registration date to signup_date to unlock customer acquisition trends.")
+        if data_quality["invalid_email_rows"]:
+            result["insights"].append(f"{data_quality['invalid_email_rows']:,} rows contain email values that do not match a basic email format check.")
         return result
 
     if orders.empty or not {"order_id", "customer_id"}.issubset(orders.columns):

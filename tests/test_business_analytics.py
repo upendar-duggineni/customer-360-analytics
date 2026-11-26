@@ -95,3 +95,25 @@ def test_customer_only_without_signup_date_still_shows_customer_counts():
     assert result["summary"]["customers"] == 2
     assert result["customer_profile"]["signup_monthly"].empty
     assert any("signup" in note.lower() for note in result["limitations"])
+
+
+
+def test_customer_only_quality_flags_preserve_duplicate_and_invalid_rows():
+    tables = {"Customers": pd.DataFrame({
+        "customer_id": ["c1", "c1", None, "c4"],
+        "customer_email": ["same@example.com", "same@example.com", "bad-email", None],
+        "customer_name": ["A", "A duplicate", "Missing ID", "D"],
+        "customer_city": ["Hyderabad", "Hyderabad", "Pune", None],
+        "signup_date": ["2026-01-01", "2026-01-01", "not-a-date", "2026-02-01"],
+    })}
+    result = build_customer_360(tables)
+    quality = result["summary"]["data_quality"]
+    assert len(result["customers"]) == 4
+    assert quality["unique_customers"] == 2
+    assert quality["missing_customer_id_rows"] == 1
+    assert quality["duplicate_customer_id_values"] == 1
+    assert quality["duplicate_customer_id_rows"] == 2
+    assert quality["duplicate_email_values"] == 1
+    assert quality["invalid_email_rows"] == 1
+    assert quality["invalid_signup_date_rows"] == 1
+    assert result["customers"]["data_quality_duplicate_id"].sum() == 2

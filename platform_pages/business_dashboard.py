@@ -42,6 +42,26 @@ if summary.get("customer_only"):
     c2.metric("Cities represented", f"{summary['cities']:,}" if summary["cities"] is not None else "Not mapped")
     c3.metric("Email coverage", f"{summary['email_coverage']:.1%}" if pd.notna(summary["email_coverage"]) else "Not mapped")
     c4.metric("Duplicate-ID rows", f"{summary['duplicate_customer_rows']:,}")
+    quality = summary["data_quality"]
+    st.subheader("Customer data quality")
+    q1, q2, q3, q4 = st.columns(4)
+    q1.metric("Missing customer IDs", f"{quality['missing_customer_id_rows']:,}")
+    q2.metric("Duplicate customer IDs", f"{quality['duplicate_customer_id_values']:,}")
+    q3.metric("Invalid email rows", f"{quality['invalid_email_rows']:,}")
+    q4.metric("Missing attribute rows", f"{quality['missing_attribute_rows']:,}")
+    with st.expander("Review data quality issues", expanded=bool(quality['missing_customer_id_rows'] or quality['duplicate_customer_id_rows'] or quality['duplicate_email_values'] or quality['invalid_email_rows'] or quality['invalid_signup_date_rows'])):
+        st.caption("These are review flags, not automatic deletions. All uploaded rows remain available in the explorer and original saved dataset.")
+        st.json(quality)
+        issue_rows = analytics["customers"]
+        issue_filter = (
+            issue_rows["data_quality_missing_id"]
+            | issue_rows["data_quality_duplicate_id"]
+            | issue_rows["data_quality_invalid_email"]
+            | issue_rows["data_quality_duplicate_email"]
+        )
+        if "signup_date" in issue_rows:
+            issue_filter |= issue_rows["signup_date"].isna()
+        st.dataframe(issue_rows.loc[issue_filter], use_container_width=True, hide_index=True)
     with st.expander("Data coverage and limitations", expanded=True):
         for note in analytics["limitations"]:
             st.info(note)
