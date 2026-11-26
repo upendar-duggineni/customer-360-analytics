@@ -280,3 +280,39 @@ The database account needs permission to create schemas, tables, indexes, and in
 ### Original Olist ETL safety
 
 The original `src/postgres_loader.py` performs a full refresh of the Olist tables. It must only be used for the Olist sample pipeline. Business workspace uploads use `src/business_storage.py` and must never call the Olist truncate-and-reload loader.
+
+## Customer 360 Analytics Engine (Milestone 4)
+
+The business dashboard now includes a reusable analytics engine in `src/business_analytics.py`. It calculates insights from normalized datasets saved in the active workspace, without reading or modifying the Olist demo tables.
+
+### Available analytics
+
+- Customer-level order frequency and first/last purchase dates.
+- Historical observed customer revenue when Payments or Order items data is available.
+- Repeat-customer count and repeat-purchase rate.
+- RFM scoring and descriptive customer segments when order dates and revenue are available.
+- Monthly order and customer trends.
+- Cohort retention based on customers active in each month after their first purchase.
+- A configurable inactivity flag (default 90 days) for operational review.
+- Customer 360 result table and CSV exports.
+
+### Metric definitions and limitations
+
+- Revenue uses summed `Payments.payment_value` per order when available; otherwise it uses summed `Order items.price`. The currency is not inferred.
+- Historical observed customer revenue is not predictive Customer Lifetime Value (CLV).
+- The inactivity flag is a configurable recency rule, not a machine-learning churn prediction.
+- RFM scores are relative quintile-style scores within the uploaded dataset; segment names are descriptive groupings, not universal customer labels.
+- Cohort retention is the share of each first-purchase cohort with at least one order in each subsequent calendar month.
+- Duplicate order IDs are reported as a limitation; the first row per order ID is used for order-level customer metrics.
+- Missing required source fields disable the dependent metric rather than inventing values.
+
+### Run analytics tests
+
+```bash
+pip install pytest
+pytest -q
+```
+
+Tests for core business analytics are in `tests/test_business_analytics.py`.
+
+The analytics dashboard remains a prototype. Review metric definitions, source data quality, workspace access controls and privacy/security requirements before using outputs for business-critical decisions.
