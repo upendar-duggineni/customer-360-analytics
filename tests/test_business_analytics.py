@@ -69,3 +69,29 @@ def test_cohort_is_enabled_at_thirty_orders():
     }
     result = build_customer_360(tables, as_of_date="2025-01-01")
     assert not result["cohort"].empty
+
+
+
+def test_customer_only_upload_produces_profile_and_signup_trend():
+    tables = {"Customers": pd.DataFrame({
+        "customer_id": ["c1", "c2", "c3", "c3"],
+        "customer_name": ["A", "B", "C", "C duplicate"],
+        "customer_email": ["a@example.com", "b@example.com", None, "c@example.com"],
+        "customer_city": ["Hyderabad", "Pune", "Hyderabad", "Hyderabad"],
+        "customer_country": ["India", "India", "India", "India"],
+        "signup_date": pd.to_datetime(["2026-01-05", "2026-01-20", "2026-02-03", "2026-02-03"]),
+    })}
+    result = build_customer_360(tables)
+    assert result["summary"]["customer_only"] is True
+    assert result["summary"]["customers"] == 3
+    assert result["summary"]["duplicate_customer_rows"] == 2
+    assert not result["customer_profile"]["signup_monthly"].empty
+    assert "revenue" not in result["summary"]
+    assert any("Orders have not been uploaded" in note for note in result["limitations"])
+
+
+def test_customer_only_without_signup_date_still_shows_customer_counts():
+    result = build_customer_360({"Customers": pd.DataFrame({"customer_id": ["c1", "c2"]})})
+    assert result["summary"]["customers"] == 2
+    assert result["customer_profile"]["signup_monthly"].empty
+    assert any("signup" in note.lower() for note in result["limitations"])

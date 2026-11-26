@@ -23,6 +23,8 @@ CANONICAL = {
         "customer_city": ["city", "town", "customer city", "ciudad"],
         "customer_state": ["state", "province", "region", "customer state", "estado"],
         "customer_pincode": ["pincode", "pin code", "postal code", "zip", "zip code", "postcode"],
+        "customer_country": ["country", "customer country", "nation", "pais", "país"],
+        "signup_date": ["signup date", "sign up date", "registration date", "registered date", "customer since", "fecha de registro"],
     },
     "Orders": {
         "order_id": ["order id", "orderid", "ord no", "order no", "order number", "order_number", "transaction id", "transaction_id", "pedido", "numero de pedido"],
@@ -345,13 +347,9 @@ def canonicalize_frame(frame, mapping, table_name, date_format=None, status_mapp
         if source and source in output.columns:
             rename[source] = canonical
     output = output.rename(columns=rename)
-    if "order_purchase_timestamp" in output:
-        if date_format == "dayfirst":
-            output["order_purchase_timestamp"] = pd.to_datetime(output["order_purchase_timestamp"], errors="coerce", dayfirst=True)
-        elif date_format == "monthfirst":
-            output["order_purchase_timestamp"] = pd.to_datetime(output["order_purchase_timestamp"], errors="coerce", dayfirst=False)
-        else:
-            output["order_purchase_timestamp"] = pd.to_datetime(output["order_purchase_timestamp"], errors="coerce", dayfirst=True)
+    for date_field in ["order_purchase_timestamp", "signup_date", "review_date"]:
+        if date_field in output:
+            output[date_field] = pd.to_datetime(output[date_field], errors="coerce", dayfirst=(date_format != "monthfirst"))
     for field in ["order_total", "payment_amount", "unit_price", "discount", "tax", "quantity"]:
         if field in output:
             output[field] = output[field].map(normalize_amount)

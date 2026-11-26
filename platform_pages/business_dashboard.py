@@ -34,6 +34,56 @@ with st.sidebar:
 
 analytics = build_customer_360(tables, churn_days=int(churn_days))
 summary = analytics["summary"]
+if summary.get("customer_only"):
+    st.subheader("Customer profile overview")
+    st.caption("Standalone customer analytics · Orders, Payments and Products are not required for this view.")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Unique customers", f"{summary['customers']:,}")
+    c2.metric("Cities represented", f"{summary['cities']:,}" if summary["cities"] is not None else "Not mapped")
+    c3.metric("Email coverage", f"{summary['email_coverage']:.1%}" if pd.notna(summary["email_coverage"]) else "Not mapped")
+    c4.metric("Duplicate-ID rows", f"{summary['duplicate_customer_rows']:,}")
+    with st.expander("Data coverage and limitations", expanded=True):
+        for note in analytics["limitations"]:
+            st.info(note)
+    monthly = analytics["customer_profile"]["signup_monthly"]
+    st.subheader("Customer acquisition")
+    if not monthly.empty:
+        st.plotly_chart(px.bar(monthly, x="month", y="new_customers", title="New customer registrations by month"), use_container_width=True)
+    else:
+        st.info("Map SignUpDate to signup_date to unlock customer acquisition trends.")
+    st.subheader("Customer geography")
+    city, country = analytics["customer_profile"]["city"], analytics["customer_profile"]["country"]
+    left, right = st.columns(2)
+    if not city.empty:
+        left.plotly_chart(px.bar(city.head(15), x="city", y="customers", title="Customers by city"), use_container_width=True)
+    else:
+        left.info("Map customer_city to view city distribution.")
+    if not country.empty:
+        right.plotly_chart(px.pie(country, names="country", values="customers", title="Customers by country", hole=0.45), use_container_width=True)
+    else:
+        right.info("Map customer_country to view country distribution.")
+    st.subheader("Customer explorer")
+    customer_frame = analytics["customers"]
+    search = st.text_input("Search customer ID, name, email or city")
+    view = customer_frame
+    searchable = [col for col in ["customer_id", "customer_name", "customer_email", "customer_city", "customer_country"] if col in view]
+    if search and searchable:
+        mask = pd.Series(False, index=view.index)
+        for col in searchable:
+            mask |= view[col].astype("string").str.contains(search, case=False, na=False)
+        view = view[mask]
+    st.dataframe(view, use_container_width=True, hide_index=True)
+    st.download_button("Download customer profile CSV", customer_frame.to_csv(index=False).encode("utf-8"), "customer_profile_analytics.csv", "text/csv")
+    st.subheader("Saved datasets")
+    for name, frame in tables.items():
+        with st.expander(f"{name} · {len(frame):,} rows"):
+            st.caption(f"Source: {metadata[name]['filename']}")
+            st.dataframe(frame.head(100), use_container_width=True, hide_index=True)
+            st.download_button(f"Download {name} CSV", frame.to_csv(index=False).encode("utf-8"), f"{name.lower().replace(' ', '_')}.csv", "text/csv", key=f"customer_only_download_{name}")
+    st.page_link("platform_pages/business_workspace.py", label="Manage workspace and upload more datasets", icon=":material/settings:")
+    st.caption("Purchase frequency, repeat rate, RFM, cohorts, inactivity and revenue appear after compatible Orders and transaction datasets are uploaded.")
+    st.stop()
+
 if not summary:
     st.warning("Customer-level analytics are not available from the translated data.")
     for note in analytics["limitations"]:

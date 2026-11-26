@@ -45,10 +45,50 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
         "monthly": _empty(),
         "insights": [],
         "limitations": [],
+        "customer_profile": {},
     }
 
+    # Customer master files support standalone profile analytics.
+    if (orders.empty or not {"order_id", "customer_id"}.issubset(orders.columns)) and not customers.empty and "customer_id" in customers.columns:
+        profile = customers.copy()
+        profile["customer_id"] = profile["customer_id"].astype("string").str.strip()
+        profile = profile[profile["customer_id"].notna() & profile["customer_id"].ne("")].copy()
+        duplicate_ids = int(profile["customer_id"].duplicated(keep=False).sum())
+        profile = profile.drop_duplicates("customer_id", keep="last").copy()
+        date_col = "signup_date" if "signup_date" in profile.columns else None
+        if date_col:
+            profile[date_col] = _as_date(profile[date_col])
+        signup_monthly = _empty()
+        if date_col and profile[date_col].notna().any():
+            signup_monthly = (profile.dropna(subset=[date_col]).assign(month=lambda f: f[date_col].dt.to_period("M").astype(str)).groupby("month")["customer_id"].nunique().rename("new_customers").reset_index())
+        city = profile["customer_city"].fillna("Not provided").astype(str).value_counts().rename_axis("city").reset_index(name="customers") if "customer_city" in profile else _empty()
+        country = profile["customer_country"].fillna("Not provided").astype(str).value_counts().rename_axis("country").reset_index(name="customers") if "customer_country" in profile else _empty()
+        email_present = profile["customer_email"].astype("string").str.strip().ne("").fillna(False) if "customer_email" in profile else pd.Series(False, index=profile.index)
+        phone_present = profile["customer_phone"].astype("string").str.strip().ne("").fillna(False) if "customer_phone" in profile else pd.Series(False, index=profile.index)
+        summary = {
+            "customer_only": True, "customers": int(profile["customer_id"].nunique()),
+            "duplicate_customer_rows": duplicate_ids,
+            "email_coverage": float(email_present.mean()) if len(profile) and "customer_email" in profile else np.nan,
+            "phone_coverage": float(phone_present.mean()) if len(profile) and "customer_phone" in profile else np.nan,
+            "cities": int(profile["customer_city"].nunique(dropna=True)) if "customer_city" in profile else None,
+            "countries": int(profile["customer_country"].nunique(dropna=True)) if "customer_country" in profile else None,
+            "signup_dates_available": bool(date_col and profile[date_col].notna().any()),
+        }
+        result["summary"] = summary
+        result["customers"] = profile.sort_values("customer_id")
+        result["customer_profile"] = {"signup_monthly": signup_monthly, "city": city, "country": country}
+        result["limitations"].append("Orders have not been uploaded. Repeat purchase, RFM, cohorts, inactivity, average order value and revenue metrics are unavailable.")
+        result["insights"].append(f"{summary['customers']:,} unique customers are available in the customer master file.")
+        if duplicate_ids:
+            result["insights"].append(f"{duplicate_ids:,} rows belong to duplicate customer IDs; one row per ID is shown in the customer explorer.")
+        if summary["signup_dates_available"]:
+            result["insights"].append("Customer acquisition trends are based on the uploaded signup_date field.")
+        else:
+            result["limitations"].append("Map a signup or registration date to signup_date to unlock customer acquisition trends.")
+        return result
+
     if orders.empty or not {"order_id", "customer_id"}.issubset(orders.columns):
-        result["limitations"].append("Upload an Orders dataset with order_id and customer_id to calculate customer-level analytics.")
+        result["limitations"].append("Upload a Customers dataset with customer_id, or an Orders dataset with order_id and customer_id.")
         return result
 
     orders = orders.dropna(subset=["order_id", "customer_id"]).copy()
