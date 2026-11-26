@@ -197,17 +197,26 @@ if uploaded is not None:
                     st.write("Assign source order statuses to canonical statuses. Unrecognized values must be assigned explicitly.")
                     for status in sorted(source_status)[:100]:
                         normalized = status.lower()
-                        default = "Completed" if normalized in {"delivered", "complete", "completed", "fulfilled"} else "Cancelled" if normalized in {"cancelled", "canceled"} else "Returned" if normalized in {"returned", "refunded", "rto"} else "Pending"
+                        known_defaults = {
+                            "delivered": "Completed", "complete": "Completed",
+                            "completed": "Completed", "fulfilled": "Completed",
+                            "pending": "Pending", "processing": "Pending",
+                            "confirmed": "Pending", "cancelled": "Cancelled",
+                            "canceled": "Cancelled", "returned": "Returned",
+                            "refunded": "Returned",
+                        }
+                        default = known_defaults.get(normalized, "Choose mapping")
+                        choices = ["Choose mapping", "Completed", "Pending", "Cancelled", "Returned"]
                         status_mapping[status] = st.selectbox(
                             f"Source status: {status}",
-                            ["Completed", "Pending", "Cancelled", "Returned", "Ignore / Unmapped"],
-                            index=["Completed", "Pending", "Cancelled", "Returned", "Ignore / Unmapped"].index(default),
+                            choices,
+                            index=choices.index(default),
                             key=f"status_{selected_sheet}_{status}",
                         )
             translated = canonicalize_frame(
                 pending["raw"], pending["mapping"], pending["table"],
                 date_format=date_format,
-                status_mapping={k.lower(): v.lower() for k, v in status_mapping.items() if v != "Ignore / Unmapped"},
+                status_mapping={k.lower(): v.lower() for k, v in status_mapping.items() if v != "Choose mapping"},
                 currency="" if currency == "Not specified" else currency,
             )
             required = {
@@ -237,6 +246,9 @@ if uploaded is not None:
                 negative = pd.to_numeric(translated[amount_field], errors="coerce") < 0
                 rejected_mask |= negative
                 rejection_reason.loc[negative] = rejection_reason.loc[negative].astype(str) + f"Negative {amount_field}; "
+            unresolved_statuses = [value for value, target in status_mapping.items() if target == "Choose mapping"]
+            if unresolved_statuses:
+                st.error("Resolve every unfamiliar order status before importing: " + ", ".join(unresolved_statuses))
             accepted = translated.loc[~rejected_mask].copy()
             rejected = translated.loc[rejected_mask].copy()
             rejected["rejection_reason"] = rejection_reason.loc[rejected_mask].values
@@ -251,7 +263,7 @@ if uploaded is not None:
                 st.error("Rejected rows are not silently dropped. Download the rejection report, correct the source or mapping, and re-import.")
                 st.dataframe(rejected.head(50), use_container_width=True, hide_index=True)
                 st.download_button("Download rejected rows and reasons", rejected.to_csv(index=False).encode("utf-8"), "rejected_rows.csv", "text/csv")
-            if not accepted.empty or not rejected.empty:
+            if (not accepted.empty or not rejected.empty) and not unresolved_statuses:
                 if st.button(f"Save import results to workspace", type="primary", key="save_translated_dataset"):
                     try:
                         if not accepted.empty:
