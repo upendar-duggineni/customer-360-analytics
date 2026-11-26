@@ -365,3 +365,22 @@ Mapping confidence is a heuristic evidence score, not a statistical probability.
 pip install pytest numpy pandas openpyxl
 pytest -q tests/test_data_translation.py tests/test_business_analytics.py
 ```
+
+
+## Cross-dataset relationship integrity (Milestone 5)
+
+The business dashboard now audits canonical key relationships across uploaded datasets without changing source records.
+
+- Orders → Customers using customer_id.
+- Order items → Orders using order_id.
+- Payments → Orders using order_id.
+- Reviews → Orders using order_id.
+- Order items → Products using product_id.
+
+The audit reports missing source keys, unmatched source keys, duplicate target-key values, match rates, and unavailable checks when a required table or field has not been uploaded. Issue rows can be reviewed and downloaded from the dashboard. This is a diagnostic audit only: it does not automatically merge, deduplicate, delete, or repair source data.
+
+Run the tests with:
+
+```bash
+python -m pytest -v tests/test_relationship_integrity.py
+```

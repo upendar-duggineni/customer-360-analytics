@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.business_storage import initialize_storage, load_workspace_datasets
 from src.business_analytics import build_customer_360
+from src.relationship_integrity import audit_relationships
 
 st.title("📈 My Business Analytics Dashboard")
 workspace = st.session_state.get("active_business_workspace")
@@ -22,6 +23,27 @@ except Exception as exc:
     st.stop()
 
 st.caption(f"{workspace['workspace_name']} · {workspace['workspace_type']} · Persistent PostgreSQL data")
+relationship_audit = audit_relationships(tables)
+with st.expander("Dataset relationship integrity", expanded=relationship_audit["summary"]["relationships_needing_review"] > 0):
+    audit_summary = relationship_audit["summary"]
+    rc1, rc2, rc3, rc4 = st.columns(4)
+    rc1.metric("Relationships checked", audit_summary["relationships_checked"])
+    rc2.metric("Healthy", audit_summary["healthy_relationships"])
+    rc3.metric("Need review", audit_summary["relationships_needing_review"])
+    rc4.metric("Unmatched rows", audit_summary["unmatched_source_rows"])
+    st.caption("A match checks whether a source key exists in the target dataset. This audit does not delete, deduplicate or repair data.")
+    st.dataframe(relationship_audit["relationships"], use_container_width=True, hide_index=True)
+    for relationship, issue_frame in relationship_audit["issues"].items():
+        if not issue_frame.empty:
+            with st.expander(f"{relationship} · {len(issue_frame):,} issue rows"):
+                st.dataframe(issue_frame, use_container_width=True, hide_index=True)
+                st.download_button(
+                    f"Download {relationship} issues",
+                    issue_frame.to_csv(index=False).encode("utf-8"),
+                    f"{relationship.lower().replace(' ', '_').replace('→', 'to')}_issues.csv",
+                    "text/csv",
+                    key=f"relationship_issue_{relationship}",
+                )
 if not tables:
     st.info("No saved datasets yet. Upload e-commerce data to get started.")
     st.page_link("platform_pages/business_workspace.py", label="Go to Data Translation Centre", icon=":material/upload_file:")
