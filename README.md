@@ -384,3 +384,26 @@ Run the tests with:
 ```bash
 python -m pytest -v tests/test_relationship_integrity.py
 ```
+
+
+## Integrated Customer 360 Explorer (Milestone 6)
+
+The business dashboard includes a customer drill-down view. Select a customer ID to inspect the customer profile, their orders, order items, matched product attributes, payments, and reviews. One-to-many datasets are displayed separately so joins do not multiply transaction rows. Duplicate product keys are excluded from enrichment and surfaced as a warning; source records are not silently deleted.
+
+Run the focused tests with:
+
+```bash
+pytest -q tests/test_customer_360_detail.py
+```
+
+## Production deployment on Render
+
+The repository includes a `render.yaml` blueprint for the Streamlit platform entry point:
+
+- Build: `pip install -r requirements.txt`
+- Start: `streamlit run platform_app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
+- Health check: `/_stcore/health`
+
+Create a managed PostgreSQL database and configure the service's `DATABASE_URL` environment variable. The database connection accepts either `DATABASE_URL` or the local `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` variables. For hosted PostgreSQL, `DB_SSLMODE=require` is configured by the blueprint.
+
+Never commit database credentials, `.env`, or deployment secrets. Configure them in the hosting provider's environment settings. The platform requires a reachable PostgreSQL database; the demo and business workspace are not stateless in-memory services.
