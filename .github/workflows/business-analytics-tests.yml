@@ -26,3 +26,4 @@ jobs:
           pytest -q tests/test_business_analytics.py
           pytest -q tests/test_relationship_integrity.py
           pytest -q tests/test_customer_360_detail.py
+          pytest -q tests/test_ai_analytics_tools.py
