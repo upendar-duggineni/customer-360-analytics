@@ -71,6 +71,18 @@ if summary.get("customer_only"):
         st.plotly_chart(px.bar(monthly, x="month", y="new_customers", title="New customer registrations by month"), use_container_width=True)
     else:
         st.info("Map SignUpDate to signup_date to unlock customer acquisition trends.")
+    st.subheader("Customer segmentation")
+    st.caption("Segments are descriptive profile groups, not purchase-behaviour predictions. Segment counts use one representative record per valid customer ID.")
+    segments = analytics["customer_segments"]
+    seg_left, seg_right = st.columns(2)
+    if not segments["signup_cohort"].empty:
+        seg_left.plotly_chart(px.bar(segments["signup_cohort"], x="segment", y="customers", title="Customers by signup cohort"), use_container_width=True)
+    else:
+        seg_left.info("Signup cohorts require a mapped signup_date.")
+    if not segments["profile_completeness"].empty:
+        seg_right.plotly_chart(px.pie(segments["profile_completeness"], names="segment", values="customers", title="Profile completeness", hole=0.45), use_container_width=True)
+    st.download_button("Download customer segment assignments", segments["assignments"].to_csv(index=False).encode("utf-8"), "customer_segments.csv", "text/csv")
+
     st.subheader("Customer geography")
     city, country = analytics["customer_profile"]["city"], analytics["customer_profile"]["country"]
     left, right = st.columns(2)

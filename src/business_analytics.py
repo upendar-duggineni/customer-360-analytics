@@ -109,6 +109,30 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
             "signup_dates_available": bool(date_col and valid_customers[date_col].notna().any()),
             "data_quality": data_quality,
         }
+        # Build explainable profile segments using one representative row per valid ID.
+        # The full profile above remains untouched for audit and data-quality review.
+        segment_base = profile.loc[valid_id].drop_duplicates("customer_id", keep="first").copy()
+        segment_base["signup_cohort"] = "Signup date unavailable"
+        if date_col:
+            segment_base.loc[segment_base[date_col].notna(), "signup_cohort"] = segment_base.loc[segment_base[date_col].notna(), date_col].dt.to_period("M").astype(str)
+        completeness_fields = [field for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_state", "customer_country", "customer_pincode"] if field in segment_base.columns]
+        if completeness_fields:
+            missing_count = segment_base[completeness_fields].apply(
+                lambda column: column.isna() | column.astype("string").str.strip().eq("").fillna(True)
+            ).sum(axis=1)
+            segment_base["profile_completeness"] = np.where(missing_count.eq(0), "Complete profile", "Needs enrichment")
+            segment_base["missing_profile_fields"] = missing_count
+        else:
+            segment_base["profile_completeness"] = "Not assessed - no profile attributes mapped"
+            segment_base["missing_profile_fields"] = np.nan
+        cohort_segments = segment_base.groupby("signup_cohort")["customer_id"].nunique().rename("customers").rename_axis("segment").reset_index()
+        completeness_segments = segment_base.groupby("profile_completeness")["customer_id"].nunique().rename("customers").rename_axis("segment").reset_index()
+        result["customer_segments"] = {
+            "assignments": segment_base,
+            "signup_cohort": cohort_segments,
+            "profile_completeness": completeness_segments,
+        }
+
         result["summary"] = summary
         result["customers"] = profile.sort_values("customer_id", na_position="last")
         result["customer_profile"] = {"signup_monthly": signup_monthly, "city": city, "country": country}

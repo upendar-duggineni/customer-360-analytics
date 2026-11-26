@@ -117,3 +117,30 @@ def test_customer_only_quality_flags_preserve_duplicate_and_invalid_rows():
     assert quality["invalid_email_rows"] == 1
     assert quality["invalid_signup_date_rows"] == 1
     assert result["customers"]["data_quality_duplicate_id"].sum() == 2
+
+
+def test_customer_only_segments_use_unique_ids_and_profile_completeness():
+    tables = {"Customers": pd.DataFrame({
+        "customer_id": ["c1", "c2", "c2", "c3"],
+        "customer_name": ["A", "B", "B duplicate", None],
+        "customer_email": ["a@example.com", "b@example.com", "b@example.com", None],
+        "customer_city": ["Hyderabad", "Pune", "Pune", "Delhi"],
+        "signup_date": ["2026-01-05", "2026-01-20", "2026-01-20", None],
+    })}
+    result = build_customer_360(tables)
+    segments = result["customer_segments"]
+    assignments = segments["assignments"]
+    assert assignments["customer_id"].nunique() == 3
+    assert assignments["profile_completeness"].value_counts().to_dict() == {
+        "Complete profile": 2,
+        "Needs enrichment": 1,
+    }
+    assert segments["signup_cohort"]["customers"].sum() == 3
+    assert "Signup date unavailable" in assignments["signup_cohort"].values
+
+
+def test_customer_segments_work_without_optional_attributes():
+    result = build_customer_360({"Customers": pd.DataFrame({"customer_id": ["c1", "c2"]})})
+    assignments = result["customer_segments"]["assignments"]
+    assert len(assignments) == 2
+    assert assignments["profile_completeness"].eq("Not assessed - no profile attributes mapped").all()
