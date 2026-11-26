@@ -323,7 +323,14 @@ def normalize_status(value, mapping):
 
 def canonicalize_frame(frame, mapping, table_name, date_format=None, status_mapping=None, currency=""):
     """Translate confirmed source->canonical mapping and preserve all source columns."""
+    # Preserve every original source field in a namespaced staging column before
+    # applying canonical names. This prevents unmapped business attributes from
+    # disappearing during translation.
     output = frame.copy()
+    for source_column in list(frame.columns):
+        preserved_name = f"source__{source_column}"
+        if preserved_name not in output.columns:
+            output[preserved_name] = frame[source_column]
     rename = {}
     for canonical, source in mapping.items():
         if source and source in output.columns:

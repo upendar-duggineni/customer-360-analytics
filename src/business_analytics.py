@@ -79,12 +79,37 @@ def build_customer_360(tables: dict, churn_days: int = 90, as_of_date=None):
         order_revenue = pay.groupby("order_id", as_index=False)["payment_value"].sum(min_count=1)
         order_revenue = order_revenue.rename(columns={"payment_value": "order_revenue"})
         revenue_source = "Payments"
+    elif not payments.empty and {"order_id", "payment_amount"}.issubset(payments.columns):
+        pay = payments[["order_id", "payment_amount"]].copy()
+        pay["order_id"] = pay["order_id"].astype(str)
+        pay["payment_amount"] = pd.to_numeric(pay["payment_amount"], errors="coerce")
+        order_revenue = pay.groupby("order_id", as_index=False)["payment_amount"].sum(min_count=1)
+        order_revenue = order_revenue.rename(columns={"payment_amount": "order_revenue"})
+        revenue_source = "Payments"
+    elif not orders.empty and {"order_id", "order_total"}.issubset(orders.columns):
+        order_revenue = orders[["order_id", "order_total"]].copy()
+        order_revenue["order_id"] = order_revenue["order_id"].astype(str)
+        order_revenue["order_total"] = pd.to_numeric(order_revenue["order_total"], errors="coerce")
+        order_revenue = order_revenue.rename(columns={"order_total": "order_revenue"})
+        revenue_source = "Orders"
     elif not items.empty and {"order_id", "price"}.issubset(items.columns):
         line = items[["order_id", "price"]].copy()
         line["order_id"] = line["order_id"].astype(str)
         line["price"] = pd.to_numeric(line["price"], errors="coerce")
         order_revenue = line.groupby("order_id", as_index=False)["price"].sum(min_count=1)
         order_revenue = order_revenue.rename(columns={"price": "order_revenue"})
+        revenue_source = "Order items"
+    elif not items.empty and {"order_id", "unit_price"}.issubset(items.columns):
+        line = items[["order_id", "unit_price"]].copy()
+        line["order_id"] = line["order_id"].astype(str)
+        line["unit_price"] = pd.to_numeric(line["unit_price"], errors="coerce")
+        if "quantity" in items.columns:
+            line["quantity"] = pd.to_numeric(items["quantity"], errors="coerce").fillna(1)
+            line["line_revenue"] = line["unit_price"] * line["quantity"]
+        else:
+            line["line_revenue"] = line["unit_price"]
+        order_revenue = line.groupby("order_id", as_index=False)["line_revenue"].sum(min_count=1)
+        order_revenue = order_revenue.rename(columns={"line_revenue": "order_revenue"})
         revenue_source = "Order items"
     else:
         result["limitations"].append("Revenue-based metrics need Payments.payment_value or Order items.price.")

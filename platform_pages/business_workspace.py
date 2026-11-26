@@ -103,7 +103,7 @@ if uploaded is not None:
         table_index = table_options.index(suggested_table) if suggested_table in table_options else 0
         table_name = st.selectbox("What does this sheet contain?", table_options, index=table_index, key=f"table_{selected_sheet}")
         proposals, profiles = suggest_mapping(raw, table_name)
-        fingerprint_source = "|".join([uploaded.name, selected_sheet, table_name] + [str(c) for c in raw.columns])
+        fingerprint_source = "|".join([selected_sheet, table_name] + [str(c) for c in raw.columns])
         fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
         saved_mapping = load_mapping_profile(workspace["workspace_id"], fingerprint)
         if saved_mapping:
