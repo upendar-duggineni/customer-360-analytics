@@ -237,3 +237,46 @@ streamlit run dashboard/app.py
 The business workspace is currently a foundation page only. It does not yet accept, store, or process company files. Authentication, team permissions, tenant isolation, validated CSV/Excel ingestion, and direct e-commerce integrations must be implemented and tested before real company data is used.
 
 The Olist dataset remains the demonstration dataset. It is not presented as a live connection to a business.
+
+## Business Workspace Persistence (Milestone 3)
+
+The business-data experience now has a PostgreSQL-backed persistence layer in a dedicated `business_platform` schema. It is separate from the existing Olist tables and does not use the Olist full-refresh ETL loader.
+
+### Workspace flow
+
+1. Run `streamlit run platform_app.py`.
+2. Open **Business analytics → Upload Business Data**.
+3. Create an Individual or Company workspace.
+4. Copy the generated workspace access key and keep it private.
+5. Upload CSV or Excel datasets, map fields, preview and validate.
+6. Save the approved dataset to PostgreSQL.
+7. Open **My Business Dashboard** to view saved datasets and analytics.
+8. On a later visit, reopen the workspace using its access key.
+
+### Database requirements
+
+The business workspace uses the same PostgreSQL connection variables as the existing project:
+
+```env
+DB_HOST=your-postgres-host
+DB_PORT=5432
+DB_NAME=your-database
+DB_USER=your-database-user
+DB_PASSWORD=your-database-password
+```
+
+The application creates the `business_platform` schema and its tables when the business workspace is opened. The equivalent SQL is available at `sql/schema/02_business_platform.sql`.
+
+The database account needs permission to create schemas, tables, indexes, and insert/update/delete rows in the business schema. For production, prefer a dedicated database role with least-privilege grants rather than a superuser.
+
+### Security and product limitations
+
+- Workspace access currently uses a generated high-entropy bearer key. Anyone with that key can access the workspace. Treat it like a password.
+- This is not full authentication: individual user accounts, team invitations, role-based access control, key rotation/recovery, audit logs, and production-grade tenant security are not implemented.
+- Dataset rows are stored as JSONB records in PostgreSQL. Large-scale ingestion and query optimization are future work.
+- Do not use regulated, highly sensitive, or production-critical data until security review, access controls, backups, retention/deletion workflows, and deployment secrets are configured.
+- The Olist demo remains a separate, public sample-data experience.
+
+### Original Olist ETL safety
+
+The original `src/postgres_loader.py` performs a full refresh of the Olist tables. It must only be used for the Olist sample pipeline. Business workspace uploads use `src/business_storage.py` and must never call the Olist truncate-and-reload loader.
