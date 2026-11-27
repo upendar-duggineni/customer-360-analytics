@@ -16,7 +16,7 @@ SUGGESTED_QUESTIONS = [
 
 
 def render_ai_assistant(tables: dict, workspace_id: str) -> None:
-    """Render an AI chat popover aligned to the top-right of the dashboard."""
+    """Render a Gemini-powered chat popover aligned to the dashboard's top-right."""
     state_key = f"business_ai_history_{workspace_id}"
     st.session_state.setdefault(state_key, [])
 
@@ -25,12 +25,12 @@ def render_ai_assistant(tables: dict, workspace_id: str) -> None:
         st.caption("Your workspace data analyst · Read-only analytics")
 
         if not get_api_key():
-            st.info("The assistant is not connected yet.")
-            st.code("OPENAI_API_KEY=your_openai_api_key\nOPENAI_MODEL=gpt-5.5", language="bash")
-            st.caption("Add the key to your local .env file or hosting secrets, then restart the app. Never commit it to GitHub.")
+            st.info("Add your Gemini API key to enable the assistant.")
+            st.code("GEMINI_API_KEY=your_gemini_api_key\nAI_PROVIDER=gemini\nGEMINI_MODEL=gemini-3.8-flash", language="bash")
+            st.caption("Add these to your local .env file. Never paste your key into chat or commit it to GitHub.")
             return
 
-        st.caption(f"Model: {os.getenv('OPENAI_MODEL', 'gpt-5.5')}")
+        st.caption(f"Provider: Gemini · Model: {os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')}")
         if st.button("Clear conversation", key=f"clear_ai_{workspace_id}", use_container_width=True):
             st.session_state[state_key] = []
             st.rerun()

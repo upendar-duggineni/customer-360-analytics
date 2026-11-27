@@ -450,3 +450,22 @@ For hosting, add `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in the provider'
 - Revenue is historical observed revenue; currency is not inferred. Inactivity is a rule, not predictive churn. Product order lines are not unit counts.
 - Conversation history is session-scoped and is not persisted as a permanent chat record.
 - Review and validate answers before using them for business-critical decisions.
+
+
+## Gemini AI Business Analyst
+
+The dashboard corner assistant uses the Google Gemini Developer API. Install dependencies and configure the key locally:
+
+```bash
+pip install -r requirements.txt
+```
+
+Add these entries to your local `.env` file (never commit the real key):
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.8-flash
+```
+
+Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey). The assistant uses Gemini function calling to select from six read-only analytics tools. Tool calculations run locally against the active workspace; only the question and the minimized results needed to answer it are sent to Gemini. Customer email and phone fields are excluded from AI tool context.
