@@ -26,11 +26,12 @@ def render_ai_assistant(tables: dict, workspace_id: str) -> None:
 
         if not get_api_key():
             st.info("Add your Gemini API key to enable the assistant.")
-            st.code("GEMINI_API_KEY=your_gemini_api_key\nAI_PROVIDER=gemini\nGEMINI_MODEL=gemini-3.8-flash", language="bash")
+            st.code("GEMINI_API_KEY=your_gemini_api_key\nAI_PROVIDER=gemini\nGEMINI_MODEL=gemini-3.8-flash\nGEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite-preview", language="bash")
             st.caption("Add these to your local .env file. Never paste your key into chat or commit it to GitHub.")
             return
 
         st.caption(f"Provider: Gemini · Model: {os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')}")
+        st.caption(f"Backup model: {os.getenv('GEMINI_FALLBACK_MODEL', 'gemini-3.1-flash-lite-preview')}")
         if st.button("Clear conversation", key=f"clear_ai_{workspace_id}", use_container_width=True):
             st.session_state[state_key] = []
             st.rerun()
