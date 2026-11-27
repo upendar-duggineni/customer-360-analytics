@@ -204,3 +204,268 @@ The dashboard is structured for deployment using Streamlit Community Cloud with 
 Upendar
 
 Built as an end-to-end Data Analytics and Business Intelligence portfolio project.
+
+---
+
+## Customer 360 Platform Experience (New)
+
+The repository now includes a platform entry point that separates the existing Olist demonstration from the planned business-data experience.
+
+### Run the platform
+
+```bash
+streamlit run platform_app.py
+```
+
+The platform navigation provides:
+
+- **Home** — choose between the Olist demo and business analytics.
+- **Explore Olist Demo** — opens the existing Olist dashboard.
+- **Customer 360 Explorer** — opens the existing entity-detail experience.
+- **Analyze My Business** — introduces the business workspace and explains the planned onboarding flow.
+
+### Run the original Olist dashboard directly
+
+The original entry point remains available:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+### Business workspace status
+
+The business workspace is currently a foundation page only. It does not yet accept, store, or process company files. Authentication, team permissions, tenant isolation, validated CSV/Excel ingestion, and direct e-commerce integrations must be implemented and tested before real company data is used.
+
+The Olist dataset remains the demonstration dataset. It is not presented as a live connection to a business.
+
+## Business Workspace Persistence (Milestone 3)
+
+The business-data experience now has a PostgreSQL-backed persistence layer in a dedicated `business_platform` schema. It is separate from the existing Olist tables and does not use the Olist full-refresh ETL loader.
+
+### Workspace flow
+
+1. Run `streamlit run platform_app.py`.
+2. Open **Business analytics → Upload Business Data**.
+3. Create an Individual or Company workspace.
+4. Copy the generated workspace access key and keep it private.
+5. Upload CSV or Excel datasets, map fields, preview and validate.
+6. Save the approved dataset to PostgreSQL.
+7. Open **My Business Dashboard** to view saved datasets and analytics.
+8. On a later visit, reopen the workspace using its access key.
+
+### Database requirements
+
+The business workspace uses the same PostgreSQL connection variables as the existing project:
+
+```env
+DB_HOST=your-postgres-host
+DB_PORT=5432
+DB_NAME=your-database
+DB_USER=your-database-user
+DB_PASSWORD=your-database-password
+```
+
+The application creates the `business_platform` schema and its tables when the business workspace is opened. The equivalent SQL is available at `sql/schema/02_business_platform.sql`.
+
+The database account needs permission to create schemas, tables, indexes, and insert/update/delete rows in the business schema. For production, prefer a dedicated database role with least-privilege grants rather than a superuser.
+
+### Security and product limitations
+
+- Workspace access currently uses a generated high-entropy bearer key. Anyone with that key can access the workspace. Treat it like a password.
+- This is not full authentication: individual user accounts, team invitations, role-based access control, key rotation/recovery, audit logs, and production-grade tenant security are not implemented.
+- Dataset rows are stored as JSONB records in PostgreSQL. Large-scale ingestion and query optimization are future work.
+- Do not use regulated, highly sensitive, or production-critical data until security review, access controls, backups, retention/deletion workflows, and deployment secrets are configured.
+- The Olist demo remains a separate, public sample-data experience.
+
+### Original Olist ETL safety
+
+The original `src/postgres_loader.py` performs a full refresh of the Olist tables. It must only be used for the Olist sample pipeline. Business workspace uploads use `src/business_storage.py` and must never call the Olist truncate-and-reload loader.
+
+## Customer 360 Analytics Engine (Milestone 4)
+
+The business dashboard now includes a reusable analytics engine in `src/business_analytics.py`. It calculates insights from normalized datasets saved in the active workspace, without reading or modifying the Olist demo tables.
+
+### Available analytics
+
+- Customer-level order frequency and first/last purchase dates.
+- Historical observed customer revenue when Payments or Order items data is available.
+- Repeat-customer count and repeat-purchase rate.
+- RFM scoring and descriptive customer segments when order dates and revenue are available.
+- Monthly order and customer trends.
+- Cohort retention based on customers active in each month after their first purchase.
+- A configurable inactivity flag (default 90 days) for operational review.
+- Customer 360 result table and CSV exports.
+- Standalone customer-master analytics without requiring Orders or Payments.
+- Customer-only descriptive segments by signup-month cohort and profile completeness.
+- Geographic customer summaries by city and country.
+- Downloadable customer segment assignments; duplicate IDs remain visible in the source profile while segment counts use one representative record per valid ID.
+- Customer-only segmentation is descriptive profile grouping, not behavioural or predictive segmentation. Purchase-behaviour segments require compatible order history.
+
+### Metric definitions and limitations
+
+- Revenue uses summed `Payments.payment_value` per order when available; otherwise it uses summed `Order items.price`. The currency is not inferred.
+- Historical observed customer revenue is not predictive Customer Lifetime Value (CLV).
+- The inactivity flag is a configurable recency rule, not a machine-learning churn prediction.
+- RFM scores are relative quintile-style scores within the uploaded dataset; segment names are descriptive groupings, not universal customer labels.
+- Cohort retention is the share of each first-purchase cohort with at least one order in each subsequent calendar month.
+- Duplicate order IDs are reported as a limitation; the first row per order ID is used for order-level customer metrics.
+- Missing required source fields disable the dependent metric rather than inventing values.
+
+### Run analytics tests
+
+```bash
+pip install pytest
+pytest -q
+```
+
+Tests for core business analytics are in `tests/test_business_analytics.py`.
+
+The analytics dashboard remains a prototype. Review metric definitions, source data quality, workspace access controls and privacy/security requirements before using outputs for business-critical decisions.
+
+## Universal E-commerce Data Translation (Architecture update)
+
+The business upload centre now profiles files before mapping and translates user-confirmed fields into a fixed canonical e-commerce model. The existing Olist demo remains separate.
+
+### Current implementation
+
+- CSV and Excel workbook inspection, including listing and selecting multiple sheets.
+- Header-row detection for exports with title/metadata rows above the column headers.
+- Candidate trailing total/subtotal row detection and exclusion from the data preview.
+- Per-column profiling: inferred type, null percentage, uniqueness, and sample values.
+- Deterministic mapping suggestions using multilingual/alternate header aliases and value-pattern evidence.
+- Human confirmation of mappings before import.
+- Ambiguous date-format choice when dates can be interpreted day-first or month-first.
+- Explicit source order-status assignment to canonical status categories.
+- Amount normalization for common INR, BRL and plain numeric formats.
+- Indian phone-number normalization while retaining identifiers as text.
+- Original source columns retained as `source__*` fields after translation.
+- Accepted and rejected rows saved separately, with rejection reasons.
+- Confirmed mapping profiles saved per workspace and reused for matching sheet/table/header structures.
+
+### Canonical e-commerce entities
+
+Customers, Orders, Order items, Products, Payments and Reviews. A sheet is assigned to one canonical entity at a time. Multiple sheets in a workbook can be processed sequentially.
+
+### Mapping confidence and LLM policy
+
+Mapping confidence is a heuristic evidence score, not a statistical probability. Header aliases and content profiling provide local deterministic suggestions. The interface includes an explicit LLM opt-in control, but no external LLM provider is connected in this version; no uploaded data or samples are sent to an AI provider. A future provider integration must transmit only masked/minimized samples after consent and must never approve mappings automatically.
+
+### Current limitations
+
+- Multi-sheet workbooks are supported by selecting and processing each sheet sequentially; automatic relationship discovery across sheets is not yet implemented.
+- Header-row and total-row detection are heuristic. Users must review the detected structure.
+- Date parsing, status assignments, currency selection and mapping remain user-confirmed.
+- Currency is recorded as a code but no FX conversion is performed.
+- Rejected rows are retained as a separate workspace dataset; review and correction/re-import workflows can be expanded.
+- The fixed model is for e-commerce. Other industries require separate canonical model packs.
+
+### Tests
+
+```bash
+pip install pytest numpy pandas openpyxl
+pytest -q tests/test_data_translation.py tests/test_business_analytics.py
+```
+
+
+## Cross-dataset relationship integrity (Milestone 5)
+
+The business dashboard now audits canonical key relationships across uploaded datasets without changing source records.
+
+- Orders → Customers using customer_id.
+- Order items → Orders using order_id.
+- Payments → Orders using order_id.
+- Reviews → Orders using order_id.
+- Order items → Products using product_id.
+
+The audit reports missing source keys, unmatched source keys, duplicate target-key values, match rates, and unavailable checks when a required table or field has not been uploaded. Issue rows can be reviewed and downloaded from the dashboard. This is a diagnostic audit only: it does not automatically merge, deduplicate, delete, or repair source data.
+
+Run the tests with:
+
+```bash
+python -m pytest -v tests/test_relationship_integrity.py
+```
+
+
+## Integrated Customer 360 Explorer (Milestone 6)
+
+The business dashboard includes a customer drill-down view. Select a customer ID to inspect the customer profile, their orders, order items, matched product attributes, payments, and reviews. One-to-many datasets are displayed separately so joins do not multiply transaction rows. Duplicate product keys are excluded from enrichment and surfaced as a warning; source records are not silently deleted.
+
+Run the focused tests with:
+
+```bash
+pytest -q tests/test_customer_360_detail.py
+```
+
+## Production deployment on Render
+
+The repository includes a `render.yaml` blueprint for the Streamlit platform entry point:
+
+- Build: `pip install -r requirements.txt`
+- Start: `streamlit run platform_app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
+- Health check: `/_stcore/health`
+
+Create a managed PostgreSQL database and configure the service's `DATABASE_URL` environment variable. The database connection accepts either `DATABASE_URL` or the local `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` variables. For hosted PostgreSQL, `DB_SSLMODE=require` is configured by the blueprint.
+
+Never commit database credentials, `.env`, or deployment secrets. Configure them in the hosting provider's environment settings. The platform requires a reachable PostgreSQL database; the demo and business workspace are not stateless in-memory services.
+
+
+## AI Business Analyst (Milestone 7)
+
+The business dashboard includes an optional OpenAI-powered chat assistant. It uses the OpenAI Responses API with a fixed set of read-only analytics functions. The model interprets questions and selects a tool; Python/Pandas and the existing analytics engine calculate the figures. The model does not receive database credentials and cannot execute arbitrary SQL.
+
+### Supported questions
+
+- Workspace overview, dataset coverage, core KPIs and metric limitations.
+- Top customers by historical observed revenue.
+- Exact customer-ID lookup with related order, item, payment and review counts.
+- Monthly order, customer and observed-revenue trends.
+- Product-category performance using order-line counts and recorded item value.
+- Payment totals and mapped payment-method comparisons.
+
+The assistant is workspace-scoped because it receives only the already-loaded dataset dictionary for the active workspace. Conversation history is kept in Streamlit session state and separated by workspace ID. Customer lookup deliberately excludes email and phone fields from the model context. Tool outputs are bounded and the assistant is instructed to disclose missing datasets and metric limitations.
+
+### Configure OpenAI
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Set the key locally in `.env` (never commit this file):
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5.5
+```
+
+For hosting, add `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in the provider's environment/secrets settings. The app does not ask users to paste keys into chat. API usage is billed separately by the OpenAI account.
+
+### AI limitations and privacy
+
+- The assistant is unavailable until an OpenAI API key is configured.
+- Only the minimized output of explicitly defined analytics tools is sent to OpenAI, not full uploaded datasets or raw SQL access.
+- Workspace data is still processed in the app's active session. This MVP workspace uses a bearer access key and is not full user authentication or role-based access control.
+- Tool results are deterministic but are limited to mapped fields and uploaded data coverage.
+- Revenue is historical observed revenue; currency is not inferred. Inactivity is a rule, not predictive churn. Product order lines are not unit counts.
+- Conversation history is session-scoped and is not persisted as a permanent chat record.
+- Review and validate answers before using them for business-critical decisions.
+
+
+## Gemini AI Business Analyst
+
+The dashboard corner assistant uses the Google Gemini Developer API. Install dependencies and configure the key locally:
+
+```bash
+pip install -r requirements.txt
+```
+
+Add these entries to your local `.env` file (never commit the real key):
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.8-flash
+```
+
+Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey). The assistant uses Gemini function calling to select from six read-only analytics tools. Tool calculations run locally against the active workspace; only the question and the minimized results needed to answer it are sent to Gemini. Customer email and phone fields are excluded from AI tool context.
